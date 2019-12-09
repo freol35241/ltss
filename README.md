@@ -16,7 +16,7 @@ I recommend the following docker image: https://docs.timescale.com/v1.0/getting-
 * Add a section to your HA configuration.yaml:
 
         tsdb:
-        db_url: postgresql://USER:PASSWORD@ADRESS/DB:NAME
+        db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
         include:
             domains:
             - sensor
