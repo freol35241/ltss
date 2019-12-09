@@ -275,7 +275,7 @@ class TSDB(threading.Thread):
         entity_id = event.data.get(ATTR_ENTITY_ID)
         state = event.data.get("new_state")
 
-        if entity_id is not None and state is not None and state != STATE_UNKNOWN:
+        if entity_id is not None and state is not None and state.state != STATE_UNKNOWN:
             if self.entity_filter(entity_id):
                 self.queue.put(event)
 
