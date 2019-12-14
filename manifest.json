@@ -1,6 +1,6 @@
 {
-    "domain": "tsdb",
-    "name": "TimescaleDB",
+    "domain": "ltss",
+    "name": "Long Time State Storage (LTSS)",
     "requirements": [
       "sqlalchemy==1.3.11",
       "geoalchemy2==0.6.3"
