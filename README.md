@@ -14,12 +14,12 @@ This component is not to be considered as a replacement to the recorder componen
 * Add a section to your HA configuration.yaml:
 
         ltss:
-        db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
-        include:
-            domains:
-            - sensor
-            entities:
-            - person.john_doe
+            db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
+            include:
+                domains:
+                - sensor
+                entities:
+                - person.john_doe
 
 ## Configuration
 
