@@ -38,7 +38,7 @@ from .models import Base, LTSS
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "tsdb"
+DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 
@@ -74,13 +74,13 @@ CONFIG_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the tsdb."""
+    """Set up LTSS."""
     conf = config[DOMAIN]
 
     db_url = conf.get(CONF_DB_URL)
     include = conf.get(CONF_INCLUDE, {})
     exclude = conf.get(CONF_EXCLUDE, {})
-    instance = TSDB(
+    instance = LTSS_DB(
         hass=hass,
         uri=db_url,
         include=include,
@@ -113,8 +113,8 @@ def session_scope(*, session=None):
         session.close()
 
 
-class TSDB(threading.Thread):
-    """A threaded tsdb class."""
+class LTSS_DB(threading.Thread):
+    """A threaded LTSS class."""
 
     def __init__(
         self,
@@ -123,8 +123,8 @@ class TSDB(threading.Thread):
         include: Dict,
         exclude: Dict,
     ) -> None:
-        """Initialize the tsdb."""
-        threading.Thread.__init__(self, name="TSDB")
+        """Initialize the ltss."""
+        threading.Thread.__init__(self, name="LTSS")
 
         self.hass = hass
         self.queue: Any = queue.Queue()
@@ -145,7 +145,7 @@ class TSDB(threading.Thread):
 
     @callback
     def async_initialize(self):
-        """Initialize the tsdb."""
+        """Initialize the ltss."""
         self.hass.bus.async_listen(EVENT_STATE_CHANGED, self.event_listener)
 
     def run(self):
@@ -159,7 +159,7 @@ class TSDB(threading.Thread):
             try:
                 self._setup_connection()
                 connected = True
-                _LOGGER.debug("Connected to tsdb database")
+                _LOGGER.debug("Connected to ltss database")
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.error(
                     "Error during connection setup: %s (retrying " "in %s seconds)",
@@ -176,8 +176,8 @@ class TSDB(threading.Thread):
                 self.async_db_ready.set_result(False)
                 persistent_notification.async_create(
                     self.hass,
-                    "TSDB could not start, please check the log",
-                    "tsdb",
+                    "LTSS could not start, please check the log",
+                    "LTSS",
                 )
 
             self.hass.add_job(connection_failed)
@@ -192,7 +192,7 @@ class TSDB(threading.Thread):
             self.async_db_ready.set_result(True)
 
             def shutdown(event):
-                """Shut down the tsdb."""
+                """Shut down the ltss."""
                 if not hass_started.done():
                     hass_started.set_result(shutdown_task)
                 self.queue.put(None)
@@ -287,7 +287,7 @@ class TSDB(threading.Thread):
 
         self.engine = create_engine(self.db_url, echo=False)
 
-        # Make sure TimescaleDB extension is loaded
+        # Make sure TimescaleDB  and PostGIS extensions are loaded
         with self.engine.connect() as con:
             con.execute(
                 text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
