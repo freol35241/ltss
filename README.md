@@ -7,6 +7,12 @@ Enabling simple long time state storage (LTSS) for your sensor states. Requires 
 
 This component is not to be considered as a replacement to the recorder component in Home Assistant but rather as an alternative to the InfluxDB component for more space-efficient long time storage of specific sensor states.
 
+Nice to know:
+* Fully SQL compatible -> works with the [SQL sensor](https://www.home-assistant.io/integrations/sql/) in Home Assistant
+* Compatible with Grafana for visualization of time series:
+    * https://blog.timescale.com/blog/grafana-time-series-exploration-visualization-postgresql-8c7baa9c3bfe/
+    * https://grafana.com/docs/grafana/latest/features/datasources/postgres/
+
 ## Installation
 
 * Make sure that you PostgreSQL instance is up and running and that you have created a database, ```DB_NAME```. I recommend the following docker image: https://docs.timescale.com/v1.0/getting-started/installation/docker/installation-docker#postgis-docker to get started quickly and easy.
