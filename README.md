@@ -27,6 +27,8 @@ Nice to know:
                 entities:
                 - person.john_doe
 
+**NOTE**: During the initial startup of the component, the extensions will be created on the specified database. This requires superuser priviligies on the PostgreSQL instance. Once the extensions are created, a user without superuser rights can be used! Ref: https://community.home-assistant.io/t/can-i-use-timescale-db-as-an-alternative-to-influx-db-in-homeassistant-for-grafana/120517/11
+
 ## Configuration
 
     ltss
