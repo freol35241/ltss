@@ -15,8 +15,15 @@ Nice to know:
 
 ## Installation
 
+Precondition
 * Make sure that you PostgreSQL instance is up and running and that you have created a database, ```DB_NAME```. I recommend the following docker image: https://docs.timescale.com/v1.0/getting-started/installation/docker/installation-docker#postgis-docker to get started quickly and easy.
-* Put this repo in a folder named ```custom_components``` in your HA config folder
+
+Manual installation:
+* Put the ltss folder from ```custom_components``` folder in this repo to a folder named ```custom_components``` in your HA config folder
+Automatic installation:
+* Just install ltss as an integration via [HACS](https://hacs.xyz/)
+
+configuration.yaml
 * Add a section to your HA configuration.yaml:
 
         ltss:
