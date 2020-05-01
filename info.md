@@ -1,5 +1,3 @@
-Long time state storage (LTSS) custom component for Home Assistant
-========================================
 
 Enabling simple long time state storage (LTSS) for your sensor states. Requires a PostgreSQL instance with the following extensions:
 * TimescaleDB
