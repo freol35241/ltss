@@ -18,7 +18,7 @@ Precondition
 
 
 Manual installation:
-* Put the ltss folder from ```custom_components``` folder in this repo to a folder named ```custom_components``` in your HA config folder
+* Put the ```ltss``` folder from ```custom_components``` folder in this repo to a folder named ```custom_components``` in your HA config folder
 
 Automatic installation:
 * Just install ltss as an integration via [HACS](https://hacs.xyz/)
