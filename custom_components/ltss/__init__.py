@@ -63,11 +63,11 @@ FILTER_SCHEMA = vol.Schema(
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        vol.Optional(DOMAIN, default=dict): FILTER_SCHEMA.extend(
-            {
-                vol.Required(CONF_DB_URL): cv.string,
-            }
-        )
+		DOMAIN: FILTER_SCHEMA.extend(
+			{
+				vol.Required(CONF_DB_URL): cv.string,
+			}
+		)
     },
     extra=vol.ALLOW_EXTRA,
 )
