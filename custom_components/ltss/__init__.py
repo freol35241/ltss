@@ -35,6 +35,7 @@ import homeassistant.util.dt as dt_util
 from sqlalchemy import text
 
 from .models import Base, LTSS
+from .migrations import check_and_migrate
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -306,7 +307,10 @@ class LTSS_DB(threading.Thread):
                         'time', 
                         chunk_time_interval => interval '1 month', 
                         if_not_exists => TRUE);""").execution_options(autocommit=True))
-
+            
+        # Migrate to newest schema if required
+        check_and_migrate(self.engine)
+            
         self.get_session = scoped_session(sessionmaker(bind=self.engine))
 
     def _close_connection(self):
