@@ -10,6 +10,9 @@ from sqlalchemy import (
     String,
     Text,
 )
+
+from sqlalchemy.schema import Index
+from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geometry
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -30,7 +33,7 @@ class LTSS(Base):  # type: ignore
     time = Column(DateTime(timezone=True), default=datetime.utcnow, primary_key=True)
     entity_id = Column(String(255), index=True)
     state = Column(String(255), index=True)
-    attributes = Column(Text)
+    attributes = Column(JSONB)
     location = Column(Geometry('POINT', srid=4326))
 
     @staticmethod
@@ -52,3 +55,5 @@ class LTSS(Base):  # type: ignore
         )
 
         return row
+
+LTSS_attributes_index = Index('ltss_attributes_idx', LTSS.attributes, postgresql_using='gin')
