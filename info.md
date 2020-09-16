@@ -1,3 +1,8 @@
+**NOTE:** Starting 2020-09-13 attributes are stored with type JSONB instead of as a plain string, in addition a GIN index is created on this column by default. At first startup after updating of LTSS, migration of your DB happens automatically. Note that this can take a couple of minutes and HASS will not finish starting (i.e. frontend will not be available) until migration is done.
+
+**WARNING:** I take no responsibility for any data loss that may happen as a result of this. Please make sure to backup your data before upgrading!
+
+----
 
 Enabling simple long time state storage (LTSS) for your sensor states. Requires a PostgreSQL instance with the following extensions:
 * TimescaleDB
@@ -76,7 +81,7 @@ The states are stored in a single [hypertable](https://docs.timescale.com/latest
 
 | Column name: | id | time | entity_id | state | attributes | location |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Type: | bigint | timestamp with timezone | string | string | string | POINT(4326) |
+| Type: | bigint | timestamp with timezone | string | string | JSONB | POINT(4326) |
 | Primary key: | x | x |  |  |  |
 | Index: | x | x | x | x | | |
 
