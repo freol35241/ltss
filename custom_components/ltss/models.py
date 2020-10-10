@@ -31,7 +31,7 @@ class LTSS(Base):  # type: ignore
     __tablename__ = "ltss"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     time = Column(DateTime(timezone=True), default=datetime.utcnow, primary_key=True)
-    entity_id = Column(String(255), index=True)
+    entity_id = Column(String(255))
     state = Column(String(255), index=True)
     attributes = Column(JSONB)
     location = Column(Geometry('POINT', srid=4326))
@@ -57,3 +57,6 @@ class LTSS(Base):  # type: ignore
         return row
 
 LTSS_attributes_index = Index('ltss_attributes_idx', LTSS.attributes, postgresql_using='gin')
+LTSS_entityid_time_composite_index = Index(
+    'ltss_entityid_time_composite_idx', LTSS.entity_id, LTSS.time.desc()
+)
