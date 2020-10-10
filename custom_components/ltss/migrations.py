@@ -35,8 +35,10 @@ def check_and_migrate(engine):
         _LOGGER.warning('Creating a composite index over entity_id and time columns, this might take a couple of minutes!')
         create_entityid_time_index(engine)
         _LOGGER.info('Index created successfully!')
-        _LOGGER.warning('Index on entity_id no longer needed, dropping...')
-        drop_entityid_index(engine)
+        
+        if index_exists('ix_ltss_entity_id'):
+            _LOGGER.warning('Index on entity_id no longer needed, dropping...')
+            drop_entityid_index(engine)
 
 def migrate_attributes_text_to_jsonb(engine):
     
@@ -61,9 +63,7 @@ def create_entityid_time_index(engine):
 def drop_entityid_index(engine):
     
     with engine.connect() as con:
-        
-        _LOGGER.info("Dropping index on entity_id column if it exists")
         con.execute(text(
-            f"""DROP INDEX IF EXISTS ix_ltss_entity_id;"""
+            f"""DROP INDEX ix_ltss_entity_id;"""
         ).execution_options(autocommit=True))
     
