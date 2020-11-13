@@ -50,7 +50,7 @@ class LTSS(Base):  # type: ignore
             entity_id=entity_id,
             time=event.time_fired,
             state=state.state,
-            attributes=json.dumps(attrs, cls=JSONEncoder),
+            attributes=json.loads(json.dumps(attrs, cls=JSONEncoder)),
             location=f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
         )
 
