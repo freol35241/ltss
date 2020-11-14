@@ -16,8 +16,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geometry
 from sqlalchemy.ext.declarative import declarative_base
 
-from homeassistant.helpers.json import JSONEncoder
-
 # SQLAlchemy Schema
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -50,7 +48,7 @@ class LTSS(Base):  # type: ignore
             entity_id=entity_id,
             time=event.time_fired,
             state=state.state,
-            attributes=json.dumps(attrs, cls=JSONEncoder),
+            attributes=attrs,
             location=f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
         )
 
