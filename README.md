@@ -86,7 +86,7 @@ The states are stored in a single [hypertable](https://docs.timescale.com/latest
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Type: | bigint | timestamp with timezone | string | string | JSONB | POINT(4326) |
 | Primary key: | x | x |  |  |  |
-| Index: | x | x | x | x | | |
+| Index: | x | x | x | x | x | |
 
 [Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is set to 1 month.
 
