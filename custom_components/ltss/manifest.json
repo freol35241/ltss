@@ -4,6 +4,7 @@
     "documentation": "https://github.com/freol35241/ltss",
     "requirements": [
       "sqlalchemy",
+      "psycopg2",
       "geoalchemy2"
     ],
     "dependencies": [],
