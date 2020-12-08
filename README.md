@@ -22,7 +22,9 @@ Nice to know:
 ## Installation
 
 Precondition
-* Make sure that you PostgreSQL instance is up and running and that you have created a database, ```DB_NAME```. I recommend the following docker image: https://docs.timescale.com/v1.0/getting-started/installation/docker/installation-docker#postgis-docker to get started quickly and easy.
+* Make sure that you PostgreSQL instance is up and running and that you have created a database, ```DB_NAME```. 
+* I recommend the following docker image: https://docs.timescale.com/v1.0/getting-started/installation/docker/installation-docker#postgis-docker to get started quickly and easy.
+* If you are using an armv7-system (like raspberry pi) you can find a precompiled docker-image [here](https://hub.docker.com/repository/docker/dekiesel/timescaledb-postgis).
 
 
 Manual installation:
