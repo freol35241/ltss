@@ -8,7 +8,7 @@ import queue
 import threading
 import time
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 import voluptuous as vol
 from sqlalchemy import exc, create_engine
@@ -29,7 +29,10 @@ from homeassistant.const import (
 from homeassistant.components import persistent_notification
 from homeassistant.core import CoreState, HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.entityfilter import generate_filter
+from homeassistant.helpers.entityfilter import (
+    convert_include_exclude_filter,
+    INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA,
+)
 from homeassistant.helpers.typing import ConfigType
 import homeassistant.util.dt as dt_util
 from homeassistant.helpers.json import JSONEncoder
@@ -47,26 +50,9 @@ CONF_DB_URL = "db_url"
 
 CONNECT_RETRY_WAIT = 3
 
-FILTER_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_EXCLUDE, default={}): vol.Schema(
-            {
-                vol.Optional(CONF_DOMAINS): vol.All(cv.ensure_list, [cv.string]),
-                vol.Optional(CONF_ENTITIES): cv.entity_ids,
-            }
-        ),
-        vol.Optional(CONF_INCLUDE, default={}): vol.Schema(
-            {
-                vol.Optional(CONF_DOMAINS): vol.All(cv.ensure_list, [cv.string]),
-                vol.Optional(CONF_ENTITIES): cv.entity_ids,
-            }
-        ),
-    }
-)
-
 CONFIG_SCHEMA = vol.Schema(
     {
-		DOMAIN: FILTER_SCHEMA.extend(
+		DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
 			{
 				vol.Required(CONF_DB_URL): cv.string,
 			}
@@ -81,13 +67,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config[DOMAIN]
 
     db_url = conf.get(CONF_DB_URL)
-    include = conf.get(CONF_INCLUDE, {})
-    exclude = conf.get(CONF_EXCLUDE, {})
+    entity_filter = convert_include_exclude_filter(conf)
+
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
-        include=include,
-        exclude=exclude,
+        entity_filter=entity_filter,
     )
     instance.async_initialize()
     instance.start()
@@ -123,8 +108,7 @@ class LTSS_DB(threading.Thread):
         self,
         hass: HomeAssistant,
         uri: str,
-        include: Dict,
-        exclude: Dict,
+        entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
         threading.Thread.__init__(self, name="LTSS")
@@ -137,12 +121,7 @@ class LTSS_DB(threading.Thread):
         self.engine: Any = None
         self.run_info: Any = None
 
-        self.entity_filter = generate_filter(
-            include.get(CONF_DOMAINS, []),
-            include.get(CONF_ENTITIES, []),
-            exclude.get(CONF_DOMAINS, []),
-            exclude.get(CONF_ENTITIES, []),
-        )
+        self.entity_filter = entity_filter
 
         self.get_session = None
 
