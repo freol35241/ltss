@@ -69,6 +69,10 @@ configuration.yaml
             (list)(Optional)
             The list of entity ids to be excluded from recordings.
 
+            entity_globs:
+            (list)(Optional)
+            Exclude all entities matching a listed pattern from recordings (e.g., `sensor.weather_*`).
+
         include
         (map)(Optional)
         Configure which integrations should be included in recordings. If set, all other entities will not be recorded.
@@ -80,6 +84,10 @@ configuration.yaml
             entities
             (list)(Optional)
             The list of entity ids to be included in the recordings.
+
+            entity_globs:
+            (list)(Optional)
+            Include all entities matching a listed pattern from recordings (e.g., `sensor.weather_*`).
 
 ## Details
 The states are stored in a single [hypertable](https://docs.timescale.com/latest/using-timescaledb/hypertables) with the following layout:
