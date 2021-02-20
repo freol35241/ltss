@@ -3,9 +3,9 @@
     "name": "Long Time State Storage (LTSS)",
     "documentation": "https://github.com/freol35241/ltss",
     "requirements": [
-      "sqlalchemy",
-      "psycopg2",
-      "geoalchemy2"
+      "sqlalchemy>=1.0,<2.0",
+      "psycopg2>=2.8,<3.0",
+      "geoalchemy2>=0.8,<0.9"
     ],
     "dependencies": [],
     "codeowners": [
