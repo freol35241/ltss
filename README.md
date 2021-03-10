@@ -39,6 +39,7 @@ configuration.yaml
 
         ltss:
             db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
+            chunk_time_interval: 2592000000000
             include:
                 domains:
                 - sensor
@@ -56,6 +57,10 @@ configuration.yaml
         db_url
         (string)(Required)
         The URL that points to your database.
+
+        chunk_time_interval
+        (int)(Optional)
+        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days).
 
         exclude
         (map)(Optional)
@@ -98,7 +103,7 @@ The states are stored in a single [hypertable](https://docs.timescale.com/latest
 | Primary key: | x | x |  |  |  |
 | Index: | x | x | x | x | x | |
 
-[Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is set to 1 month.
+[Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is configurable using the `chunk_time_interval` config option. It defaults to 2592000000000 microseconds (30 days).
 
 The location column is only populated for those states where ```latitude``` and ```longitude``` is part of the state attributes.
 

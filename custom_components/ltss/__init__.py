@@ -47,6 +47,7 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
+CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
 
 CONNECT_RETRY_WAIT = 3
 
@@ -55,6 +56,7 @@ CONFIG_SCHEMA = vol.Schema(
 		DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
 			{
 				vol.Required(CONF_DB_URL): cv.string,
+                vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.positive_int, # 30 days
 			}
 		)
     },
@@ -67,11 +69,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config[DOMAIN]
 
     db_url = conf.get(CONF_DB_URL)
+    chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
+        chunk_time_interval=chunk_time_interval,
         entity_filter=entity_filter,
     )
     instance.async_initialize()
@@ -108,6 +112,7 @@ class LTSS_DB(threading.Thread):
         self,
         hass: HomeAssistant,
         uri: str,
+        chunk_time_interval: int,
         entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
@@ -117,6 +122,7 @@ class LTSS_DB(threading.Thread):
         self.queue: Any = queue.Queue()
         self.recording_start = dt_util.utcnow()
         self.db_url = uri
+        self.chunk_time_interval = chunk_time_interval
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
         self.run_info: Any = None
@@ -282,13 +288,19 @@ class LTSS_DB(threading.Thread):
         # Create all tables if not exists
         Base.metadata.create_all(self.engine)
 
-        # Create hypertable
+        # Create hypertable and set chunk_time_interval
         with self.engine.connect() as con:
             con.execute(text(f"""SELECT create_hypertable(
                         '{LTSS.__tablename__}', 
                         'time', 
-                        chunk_time_interval => interval '1 month', 
                         if_not_exists => TRUE);""").execution_options(autocommit=True))
+            
+            con.execute(
+                text(
+                    f"SELECT set_chunk_time_interval('{LTSS.__tablename__}',"
+                    f" {self.chunk_time_interval});"
+                ).execution_options(autocommit=True)
+            )
             
         # Migrate to newest schema if required
         check_and_migrate(self.engine)
