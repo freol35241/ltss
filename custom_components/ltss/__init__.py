@@ -56,7 +56,7 @@ CONFIG_SCHEMA = vol.Schema(
 		DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
 			{
 				vol.Required(CONF_DB_URL): cv.string,
-                vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.int, # 30 days
+                vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.positive_int, # 30 days
 			}
 		)
     },
