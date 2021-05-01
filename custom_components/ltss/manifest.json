@@ -1,5 +1,6 @@
 {
     "domain": "ltss",
+    "version": "1.0.0",
     "name": "Long Time State Storage (LTSS)",
     "documentation": "https://github.com/freol35241/ltss",
     "requirements": [
