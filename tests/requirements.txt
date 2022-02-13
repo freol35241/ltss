@@ -1,0 +1,7 @@
+docker==5.0.3
+GeoAlchemy2==0.10.2
+homeassistant==2022.2.6
+psycopg2==2.9.3
+pytest-docker==0.10.3
+pytest==7.0.1
+SQLAlchemy==1.4.31

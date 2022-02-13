@@ -11,7 +11,7 @@ import json
 from typing import Any, Dict, Optional, Callable
 
 import voluptuous as vol
-from sqlalchemy import exc, create_engine
+from sqlalchemy import exc, create_engine, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -48,17 +48,21 @@ DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
+CONF_SETUP_TIMESCALEDB = "setup_timescaledb"
+CONF_SETUP_POSTGIS = "setup_postgis"
 
 CONNECT_RETRY_WAIT = 3
 
 CONFIG_SCHEMA = vol.Schema(
     {
-		DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
-			{
-				vol.Required(CONF_DB_URL): cv.string,
-                vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.positive_int, # 30 days
-			}
-		)
+        DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
+            {
+                vol.Required(CONF_DB_URL): cv.string,
+                vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.positive_int,  # 30 days
+                vol.Optional(CONF_SETUP_TIMESCALEDB, default=True): cv.boolean,
+                vol.Optional(CONF_SETUP_POSTGIS, default=True): cv.boolean,
+            }
+        )
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -70,18 +74,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     db_url = conf.get(CONF_DB_URL)
     chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
+    setup_timescaledb = conf.get(CONF_SETUP_TIMESCALEDB)
+    setup_postgis = conf.get(CONF_SETUP_POSTGIS)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
         chunk_time_interval=chunk_time_interval,
+        setup_timescaledb=setup_timescaledb,
+        setup_postgis=setup_postgis,
         entity_filter=entity_filter,
     )
     instance.async_initialize()
     instance.start()
 
     return await instance.async_db_ready
+
 
 @contextmanager
 def session_scope(*, session=None):
@@ -109,11 +118,13 @@ class LTSS_DB(threading.Thread):
     """A threaded LTSS class."""
 
     def __init__(
-        self,
-        hass: HomeAssistant,
-        uri: str,
-        chunk_time_interval: int,
-        entity_filter: Callable[[str], bool],
+            self,
+            hass: HomeAssistant,
+            uri: str,
+            chunk_time_interval: int,
+            setup_timescaledb: bool,
+            setup_postgis: bool,
+            entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
         threading.Thread.__init__(self, name="LTSS")
@@ -123,6 +134,8 @@ class LTSS_DB(threading.Thread):
         self.recording_start = dt_util.utcnow()
         self.db_url = uri
         self.chunk_time_interval = chunk_time_interval
+        self.setup_timescaledb = setup_timescaledb
+        self.setup_postgis = setup_postgis
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
         self.run_info: Any = None
@@ -148,6 +161,13 @@ class LTSS_DB(threading.Thread):
                 self._setup_connection()
                 connected = True
                 _LOGGER.debug("Connected to ltss database")
+            except MissingExtensionError as err:
+                _LOGGER.error(
+                    "Error during database setup: %s",
+                    err
+                )
+
+                break  # this error can't be healed by waiting
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.error(
                     "Error during connection setup: %s (retrying " "in %s seconds)",
@@ -157,7 +177,6 @@ class LTSS_DB(threading.Thread):
                 tries += 1
 
         if not connected:
-
             @callback
             def connection_failed():
                 """Connect failed tasks."""
@@ -274,37 +293,75 @@ class LTSS_DB(threading.Thread):
             self.engine.dispose()
 
         self.engine = create_engine(self.db_url, echo=False,
-            json_serializer=lambda obj: json.dumps(obj, cls=JSONEncoder))
+                                    json_serializer=lambda obj: json.dumps(obj, cls=JSONEncoder))
 
-        # Make sure TimescaleDB  and PostGIS extensions are loaded
-        with self.engine.connect() as con:
-            con.execute(
-                text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
-                ).execution_options(autocommit=True))
-            con.execute(
-                text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
-                ).execution_options(autocommit=True))
+        con = self.engine.connect()
+        inspector = inspect(self.engine)
 
-        # Create all tables if not exists
-        Base.metadata.create_all(self.engine)
+        # only setup table if required (not there yet)
+        if not inspector.has_table(LTSS.__tablename__):
 
-        # Create hypertable and set chunk_time_interval
-        with self.engine.connect() as con:
-            con.execute(text(f"""SELECT create_hypertable(
-                        '{LTSS.__tablename__}', 
-                        'time', 
-                        if_not_exists => TRUE);""").execution_options(autocommit=True))
-            
-            con.execute(
+            if self.setup_postgis:
+                # because it needs to be activated when calling Base.metadata.create_all()
+                LTSS.activate_location_handling()
+
+                postgis_available = 0 != con.execute(
+                    text("SELECT * FROM pg_available_extensions WHERE name = 'postgis'")).rowcount
+
+                if postgis_available:
+                    con.execute(
+                        text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
+                             ).execution_options(autocommit=True))
+                else:
+                    raise MissingExtensionError("Postgis should be set up but extension is not available")
+
+            if self.setup_timescaledb:
+                timescaledb_available = 0 != con.execute(
+                    text("SELECT * FROM pg_available_extensions WHERE name = 'timescaledb'")).rowcount
+
+                if timescaledb_available:
+                    con.execute(
+                        text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
+                             ).execution_options(autocommit=True))
+                else:
+                    raise MissingExtensionError("TimescaleDB should be set up but extension is not available")
+
+            Base.metadata.create_all(self.engine)
+
+            if self.setup_timescaledb:
+                # Create hypertable
+                con.execute(text(f"""SELECT create_hypertable(
+                            '{LTSS.__tablename__}', 
+                            'time', 
+                            if_not_exists => TRUE);""").execution_options(autocommit=True))
+
+        timescaledb_enabled = 0 != con.execute(
+            text("SELECT * FROM pg_extension WHERE extname = 'timescaledb'")).rowcount
+
+        if timescaledb_enabled:  # if timescaledb could possible be activated
+            if 0 != con.execute(  # check if timescaledb/hypertable is being used for our table
+                    text(
+                        f"SELECT * FROM timescaledb_information.hypertables "
+                        f"WHERE hypertable_name = '{LTSS.__tablename__}'")).rowcount:
+
+                # (re)set chunk time interval
+                con.execute(
+                    text(
+                        f"SELECT set_chunk_time_interval('{LTSS.__tablename__}',"
+                        f" {self.chunk_time_interval});"
+                    ).execution_options(autocommit=True)
+                )
+
+        # if table has the additional location column, activate Postgis handling
+        if 1 == con.execute(
                 text(
-                    f"SELECT set_chunk_time_interval('{LTSS.__tablename__}',"
-                    f" {self.chunk_time_interval});"
-                ).execution_options(autocommit=True)
-            )
-            
+                    f"SELECT * FROM information_schema.columns "
+                    f"WHERE table_name = '{LTSS.__tablename__}' AND COLUMN_NAME = 'location'")).rowcount:
+            LTSS.activate_location_handling()
+
         # Migrate to newest schema if required
         check_and_migrate(self.engine)
-            
+
         self.get_session = scoped_session(sessionmaker(bind=self.engine))
 
     def _close_connection(self):
@@ -312,3 +369,7 @@ class LTSS_DB(threading.Thread):
         self.engine.dispose()
         self.engine = None
         self.get_session = None
+
+
+class MissingExtensionError(Exception):
+    pass
