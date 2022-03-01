@@ -33,10 +33,10 @@ class LTSS(Base):  # type: ignore
     entity_id = Column(String(255))
     state = Column(String(255), index=True)
     attributes = Column(JSONB)
-    location = None
+    location = None  # when not activated, no location column will be added to the table/database
 
     @classmethod
-    def activate_location_handling(cls):
+    def activate_location_extraction(cls):
         """
         Method to activate proper Postgis handling of location.
 

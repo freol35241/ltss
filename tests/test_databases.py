@@ -5,7 +5,7 @@ import docker as docker
 import pytest
 from sqlalchemy import text
 
-from custom_components.ltss import LTSS_DB, LTSS, MissingExtensionError
+from custom_components.ltss import LTSS_DB, LTSS
 
 
 class TestDBSetup:
@@ -42,29 +42,6 @@ class TestDBSetup:
     def ltss_init_wrapper(container, setup_timescaledb, setup_postgis):
         return LTSS_DB(None, 'postgresql://postgres@localhost:' + container.ports['5432/tcp'][0]['HostPort'],
                        123, setup_timescaledb, setup_postgis, lambda x: False)
-
-    def test_postgis_not_available(self):
-        container = self.db_container("postgres:latest")
-
-        try:
-            ltss = self.ltss_init_wrapper(container, False, True)
-            with pytest.raises(MissingExtensionError,
-                               match=r".*Postgis should be set up but extension is not available.*"):
-                ltss._setup_connection()
-        finally:
-            container.stop()
-
-    def test_timescaledb_not_available(self):
-        container = self.db_container("postgres:latest")
-
-        try:
-            ltss = self.ltss_init_wrapper(container, True, False)
-            with pytest.raises(MissingExtensionError,
-                               match=r".*TimescaleDB should be set up but extension is not available.*"):
-                ltss._setup_connection()
-
-        finally:
-            container.stop()
 
     def test_lite(self):
         container = self.db_container("postgres:latest")

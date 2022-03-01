@@ -286,6 +286,26 @@ class LTSS_DB(threading.Thread):
             if self.entity_filter(entity_id):
                 self.queue.put(event)
 
+    def _ltss_is_hyptertable(self):
+        if 'timescaledb' not in self.available_extensions:
+            return False
+
+        return 1 == self.con.execute(
+            text(
+                f"SELECT 1 FROM timescaledb_information.hypertables "
+                f"WHERE hypertable_name = '{LTSS.__tablename__}'")).rowcount
+
+    def _ltss_with_postgis(self):
+        return 1 == self.con.execute(
+            text(
+                f"SELECT 1 FROM information_schema.columns "
+                f"WHERE table_name = '{LTSS.__tablename__}' AND COLUMN_NAME = 'location'")).rowcount
+
+    def _update_chunk_time_interval(self):
+        self.con.execute(text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval});")
+                         .execution_options(autocommit=True)
+                         )
+
     def _setup_connection(self):
         """Ensure database is ready to fly."""
 
@@ -295,74 +315,47 @@ class LTSS_DB(threading.Thread):
         self.engine = create_engine(self.db_url, echo=False,
                                     json_serializer=lambda obj: json.dumps(obj, cls=JSONEncoder))
 
-        con = self.engine.connect()
+        self.con = self.engine.connect()
+
+        self.available_extensions = [row['name'] for row in
+                                     self.con.execute(text("SELECT name FROM pg_available_extensions"))]
+
         inspector = inspect(self.engine)
-
-        # only setup table if required (not there yet)
         if not inspector.has_table(LTSS.__tablename__):
+            self._create_table()
 
-            if self.setup_postgis:
-                # because it needs to be activated when calling Base.metadata.create_all()
-                LTSS.activate_location_handling()
+        if self._ltss_is_hyptertable():
+            self._update_chunk_time_interval()
 
-                postgis_available = 0 != con.execute(
-                    text("SELECT * FROM pg_available_extensions WHERE name = 'postgis'")).rowcount
-
-                if postgis_available:
-                    con.execute(
-                        text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
-                             ).execution_options(autocommit=True))
-                else:
-                    raise MissingExtensionError("Postgis should be set up but extension is not available")
-
-            if self.setup_timescaledb:
-                timescaledb_available = 0 != con.execute(
-                    text("SELECT * FROM pg_available_extensions WHERE name = 'timescaledb'")).rowcount
-
-                if timescaledb_available:
-                    con.execute(
-                        text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
-                             ).execution_options(autocommit=True))
-                else:
-                    raise MissingExtensionError("TimescaleDB should be set up but extension is not available")
-
-            Base.metadata.create_all(self.engine)
-
-            if self.setup_timescaledb:
-                # Create hypertable
-                con.execute(text(f"""SELECT create_hypertable(
-                            '{LTSS.__tablename__}', 
-                            'time', 
-                            if_not_exists => TRUE);""").execution_options(autocommit=True))
-
-        timescaledb_enabled = 0 != con.execute(
-            text("SELECT * FROM pg_extension WHERE extname = 'timescaledb'")).rowcount
-
-        if timescaledb_enabled:  # if timescaledb could possible be activated
-            if 0 != con.execute(  # check if timescaledb/hypertable is being used for our table
-                    text(
-                        f"SELECT * FROM timescaledb_information.hypertables "
-                        f"WHERE hypertable_name = '{LTSS.__tablename__}'")).rowcount:
-
-                # (re)set chunk time interval
-                con.execute(
-                    text(
-                        f"SELECT set_chunk_time_interval('{LTSS.__tablename__}',"
-                        f" {self.chunk_time_interval});"
-                    ).execution_options(autocommit=True)
-                )
-
-        # if table has the additional location column, activate Postgis handling
-        if 1 == con.execute(
-                text(
-                    f"SELECT * FROM information_schema.columns "
-                    f"WHERE table_name = '{LTSS.__tablename__}' AND COLUMN_NAME = 'location'")).rowcount:
-            LTSS.activate_location_handling()
+        if self._ltss_with_postgis():
+            LTSS.activate_location_extraction()
 
         # Migrate to newest schema if required
         check_and_migrate(self.engine)
 
         self.get_session = scoped_session(sessionmaker(bind=self.engine))
+
+    def _create_table(self):
+        if 'postgis' in self.available_extensions:
+            self.con.execute(
+                text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
+                     ).execution_options(autocommit=True))
+
+            # because it needs to be activated before calling Base.metadata.create_all()
+            LTSS.activate_location_extraction()
+
+        Base.metadata.create_all(self.engine)
+
+        if 'timescaledb' in self.available_extensions:
+            self.con.execute(
+                text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
+                     ).execution_options(autocommit=True))
+
+            # Create hypertable
+            self.con.execute(text(f"""SELECT create_hypertable(
+                            '{LTSS.__tablename__}', 
+                            'time', 
+                            if_not_exists => TRUE);""").execution_options(autocommit=True))
 
     def _close_connection(self):
         """Close the connection."""
