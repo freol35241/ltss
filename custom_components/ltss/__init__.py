@@ -149,13 +149,6 @@ class LTSS_DB(threading.Thread):
                 self._setup_connection()
                 connected = True
                 _LOGGER.debug("Connected to ltss database")
-            except MissingExtensionError as err:
-                _LOGGER.error(
-                    "Error during database setup: %s",
-                    err
-                )
-
-                break  # this error can't be healed by waiting
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.error(
                     "Error during connection setup: %s (retrying " "in %s seconds)",
@@ -350,7 +343,3 @@ class LTSS_DB(threading.Thread):
         self.engine.dispose()
         self.engine = None
         self.get_session = None
-
-
-class MissingExtensionError(Exception):
-    pass
