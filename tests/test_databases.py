@@ -39,15 +39,15 @@ class TestDBSetup:
         return container
 
     @staticmethod
-    def ltss_init_wrapper(container, setup_timescaledb, setup_postgis):
+    def ltss_init_wrapper(container):
         return LTSS_DB(None, 'postgresql://postgres@localhost:' + container.ports['5432/tcp'][0]['HostPort'],
-                       123, setup_timescaledb, setup_postgis, lambda x: False)
+                       123, lambda x: False)
 
     def test_lite(self):
         container = self.db_container("postgres:latest")
 
         try:
-            ltss = self.ltss_init_wrapper(container, False, False)
+            ltss = self.ltss_init_wrapper(container)
             ltss._setup_connection()
 
             with ltss.engine.connect() as con:
@@ -60,7 +60,7 @@ class TestDBSetup:
         container = self.db_container("timescale/timescaledb:latest-pg14")
 
         try:
-            ltss = self.ltss_init_wrapper(container, True, False)
+            ltss = self.ltss_init_wrapper(container)
             ltss._setup_connection()
 
             with ltss.engine.connect() as con:
@@ -74,7 +74,7 @@ class TestDBSetup:
         container = self.db_container("timescale/timescaledb-postgis:latest-pg12")
 
         try:
-            ltss = self.ltss_init_wrapper(container, True, True)
+            ltss = self.ltss_init_wrapper(container)
             ltss._setup_connection()
 
             with ltss.engine.connect() as con:

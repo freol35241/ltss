@@ -48,8 +48,6 @@ DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
-CONF_SETUP_TIMESCALEDB = "setup_timescaledb"
-CONF_SETUP_POSTGIS = "setup_postgis"
 
 CONNECT_RETRY_WAIT = 3
 
@@ -59,8 +57,6 @@ CONFIG_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_DB_URL): cv.string,
                 vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=2592000000000): cv.positive_int,  # 30 days
-                vol.Optional(CONF_SETUP_TIMESCALEDB, default=True): cv.boolean,
-                vol.Optional(CONF_SETUP_POSTGIS, default=True): cv.boolean,
             }
         )
     },
@@ -74,16 +70,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     db_url = conf.get(CONF_DB_URL)
     chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
-    setup_timescaledb = conf.get(CONF_SETUP_TIMESCALEDB)
-    setup_postgis = conf.get(CONF_SETUP_POSTGIS)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
         chunk_time_interval=chunk_time_interval,
-        setup_timescaledb=setup_timescaledb,
-        setup_postgis=setup_postgis,
         entity_filter=entity_filter,
     )
     instance.async_initialize()
@@ -122,8 +114,6 @@ class LTSS_DB(threading.Thread):
             hass: HomeAssistant,
             uri: str,
             chunk_time_interval: int,
-            setup_timescaledb: bool,
-            setup_postgis: bool,
             entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
@@ -134,8 +124,6 @@ class LTSS_DB(threading.Thread):
         self.recording_start = dt_util.utcnow()
         self.db_url = uri
         self.chunk_time_interval = chunk_time_interval
-        self.setup_timescaledb = setup_timescaledb
-        self.setup_postgis = setup_postgis
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
         self.run_info: Any = None
