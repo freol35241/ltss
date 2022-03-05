@@ -267,26 +267,6 @@ class LTSS_DB(threading.Thread):
             if self.entity_filter(entity_id):
                 self.queue.put(event)
 
-    def _ltss_is_hyptertable(self):
-        if 'timescaledb' not in self.available_extensions:
-            return False
-
-        return 1 == self.con.execute(
-            text(
-                f"SELECT 1 FROM timescaledb_information.hypertables "
-                f"WHERE hypertable_name = '{LTSS.__tablename__}'")).rowcount
-
-    def _ltss_with_postgis(self):
-        return 1 == self.con.execute(
-            text(
-                f"SELECT 1 FROM information_schema.columns "
-                f"WHERE table_name = '{LTSS.__tablename__}' AND COLUMN_NAME = 'location'")).rowcount
-
-    def _update_chunk_time_interval(self):
-        self.con.execute(text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval});")
-                         .execution_options(autocommit=True)
-                         )
-
     def _setup_connection(self):
         """Ensure database is ready to fly."""
 
@@ -296,19 +276,27 @@ class LTSS_DB(threading.Thread):
         self.engine = create_engine(self.db_url, echo=False,
                                     json_serializer=lambda obj: json.dumps(obj, cls=JSONEncoder))
 
-        self.con = self.engine.connect()
-
-        self.available_extensions = [row['name'] for row in
-                                     self.con.execute(text("SELECT name FROM pg_available_extensions"))]
-
         inspector = inspect(self.engine)
-        if not inspector.has_table(LTSS.__tablename__):
-            self._create_table()
 
-        if self._ltss_is_hyptertable():
-            self._update_chunk_time_interval()
+        with self.engine.connect() as con:
+            available_extensions = [row['name'] for row in
+                                    con.execute(text("SELECT name FROM pg_available_extensions"))]
 
-        if self._ltss_with_postgis():
+            # create table if necessary
+            if not inspector.has_table(LTSS.__tablename__):
+                self._create_table(available_extensions)
+
+            # set/update chunk_time_interval
+            if 'timescaledb' in available_extensions and 1 == con.execute(
+                    f"SELECT 1 FROM timescaledb_information.hypertables "
+                    f"WHERE hypertable_name = '{LTSS.__tablename__}'").rowcount:
+                con.execute(
+                    text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})")
+                        .execution_options(autocommit=True)
+                )
+
+        # check if table has been set up with location extraction
+        if "location" in [column_conf["name"] for column_conf in inspector.get_columns(LTSS.__tablename__)]:
             LTSS.activate_location_extraction()
 
         # Migrate to newest schema if required
@@ -316,27 +304,28 @@ class LTSS_DB(threading.Thread):
 
         self.get_session = scoped_session(sessionmaker(bind=self.engine))
 
-    def _create_table(self):
-        if 'postgis' in self.available_extensions:
-            self.con.execute(
-                text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
-                     ).execution_options(autocommit=True))
+    def _create_table(self, available_extensions):
+        with self.engine.connect() as con:
+            if 'postgis' in available_extensions:
+                con.execute(
+                    text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
+                         ).execution_options(autocommit=True))
 
-            # because it needs to be activated before calling Base.metadata.create_all()
-            LTSS.activate_location_extraction()
+                # because it needs to be activated before calling Base.metadata.create_all()
+                LTSS.activate_location_extraction()
 
-        Base.metadata.create_all(self.engine)
+            Base.metadata.create_all(self.engine)
 
-        if 'timescaledb' in self.available_extensions:
-            self.con.execute(
-                text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
-                     ).execution_options(autocommit=True))
+            if 'timescaledb' in available_extensions:
+                con.execute(
+                    text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
+                         ).execution_options(autocommit=True))
 
-            # Create hypertable
-            self.con.execute(text(f"""SELECT create_hypertable(
-                            '{LTSS.__tablename__}', 
-                            'time', 
-                            if_not_exists => TRUE);""").execution_options(autocommit=True))
+                # Create hypertable
+                con.execute(text(f"""SELECT create_hypertable(
+                                '{LTSS.__tablename__}', 
+                                'time', 
+                                if_not_exists => TRUE);""").execution_options(autocommit=True))
 
     def _close_connection(self):
         """Close the connection."""
