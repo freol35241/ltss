@@ -279,24 +279,33 @@ class LTSS_DB(threading.Thread):
         inspector = inspect(self.engine)
 
         with self.engine.connect() as con:
-            available_extensions = [row['name'] for row in
-                                    con.execute(text("SELECT name FROM pg_available_extensions"))]
+            available_extensions = {row['name']: row['installed_version'] for row in
+                                    con.execute(text("SELECT name, installed_version FROM pg_available_extensions"))}
 
             # create table if necessary
             if not inspector.has_table(LTSS.__tablename__):
                 self._create_table(available_extensions)
 
-            # set/update chunk_time_interval
-            if 'timescaledb' in available_extensions and 1 == con.execute(
-                    f"SELECT 1 FROM timescaledb_information.hypertables "
-                    f"WHERE hypertable_name = '{LTSS.__tablename__}'").rowcount:
-                con.execute(
-                    text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})")
-                        .execution_options(autocommit=True)
+            if 'timescaledb' in available_extensions:
+
+                # timescaledb's table/column name changed with v2
+                if int(available_extensions['timescaledb'].split('.')[0]) >= 2:
+                    query = f"SELECT 1 FROM timescaledb_information.hypertables "
+                    f"WHERE hypertable_name = '{LTSS.__tablename__}'"
+                else:
+                    query = f"SELECT 1 FROM timescaledb_information.hypertable "
+                    f"WHERE table_name = '{LTSS.__tablename__}'"
+
+                # only if LTSS table is a hypertable, set/update chunk_time_interval
+                if 1 == con.execute(query).rowcount:
+                    con.execute(
+                        text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})")
+                            .execution_options(autocommit=True)
                 )
 
         # check if table has been set up with location extraction
         if "location" in [column_conf["name"] for column_conf in inspector.get_columns(LTSS.__tablename__)]:
+            # activate location extraction in model/ORM
             LTSS.activate_location_extraction()
 
         # Migrate to newest schema if required
@@ -311,7 +320,7 @@ class LTSS_DB(threading.Thread):
                     text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
                          ).execution_options(autocommit=True))
 
-                # because it needs to be activated before calling Base.metadata.create_all()
+                # activate location extraction in model/ORM to add necessary column when calling create_all()
                 LTSS.activate_location_extraction()
 
             Base.metadata.create_all(self.engine)

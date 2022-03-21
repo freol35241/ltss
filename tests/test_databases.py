@@ -56,9 +56,11 @@ class TestDBSetup:
         finally:
             container.stop()
 
-    def test_timescaledb(self):
-        container = self.db_container("timescale/timescaledb:latest-pg14")
-
+    @pytest.mark.parametrize("version",
+                             ["latest-pg9.6", "latest-pg10", "latest-pg11", "latest-pg12", "latest-pg13", "latest-pg14"]
+                             )
+    def test_timescaledb(self, version):
+        container = self.db_container(f"timescale/timescaledb:{version}")
         try:
             ltss = self.ltss_init_wrapper(container)
             ltss._setup_connection()
@@ -86,9 +88,19 @@ class TestDBSetup:
 
     @staticmethod
     def _is_hypertable(con):
-        return 1 == con.execute(text(
-            f"SELECT * FROM timescaledb_information.hypertables "
-            f"WHERE hypertable_name = '{LTSS.__tablename__}'")).rowcount
+        timescaledb_version = con.execute("SELECT installed_version "
+                                          "FROM pg_available_extensions "
+                                          "WHERE name = 'timescaledb'").scalar()
+
+        # timescaledb's table/column name changed with v2
+        if int(timescaledb_version.split('.')[0]) >= 2:
+            query = f"SELECT 1 FROM timescaledb_information.hypertables "
+            f"WHERE hypertable_name = '{LTSS.__tablename__}'"
+        else:
+            query = f"SELECT 1 FROM timescaledb_information.hypertable "
+            f"WHERE table_name = '{LTSS.__tablename__}'"
+
+        return 1 == con.execute(query).rowcount
 
     @staticmethod
     def _has_columns(con):
