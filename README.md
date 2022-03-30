@@ -7,9 +7,13 @@ Long time state storage (LTSS) custom component for Home Assistant
 
 ----
 
-Enabling simple long time state storage (LTSS) for your sensor states. Requires a PostgreSQL instance with the following extensions:
+Enabling simple long time state storage (LTSS) for your sensor states in a PostgreSQL database.
+
+The following extensions are required for full functionality:
 * TimescaleDB
 * PostGIS
+
+LTSS automatically detects the available extensions and creates the necessary table accordingly. A PostgeSQL instance without those extensions can be used but will lack some features: efficient storing and accessing time-series data (without TimescaleDB) and directly accessing geolocation data of logged data (without PostGis).
 
 This component is not to be considered as a replacement to the recorder component in Home Assistant but rather as an alternative to the InfluxDB component for more space-efficient long time storage of specific sensor states.
 
@@ -60,7 +64,7 @@ configuration.yaml
 
         chunk_time_interval
         (int)(Optional)
-        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days).
+        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
 
         exclude
         (map)(Optional)
@@ -95,17 +99,19 @@ configuration.yaml
             Include all entities matching a listed pattern from recordings (e.g., `sensor.weather_*`).
 
 ## Details
-The states are stored in a single [hypertable](https://docs.timescale.com/latest/using-timescaledb/hypertables) with the following layout:
+The states are stored in a single table ([hypertable](https://docs.timescale.com/latest/using-timescaledb/hypertables), when TimescaleDB is available) with the following layout:
 
-| Column name: | id | time | entity_id | state | attributes | location |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Type: | bigint | timestamp with timezone | string | string | JSONB | POINT(4326) |
+| Column name: | id | time | entity_id | state | attributes | location [PostGIS-only] |
+|:---|:---:|:---:|:---:|:---:|:---:|:-----------------------:|
+| Type: | bigint | timestamp with timezone | string | string | JSONB |       POINT(4326)       |
 | Primary key: | x | x |  |  |  |
-| Index: | x | x | x | x | x | |
+| Index: | x | x | x | x | x |                         |
 
+### Only available with TimescaleDB:
 [Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is configurable using the `chunk_time_interval` config option. It defaults to 2592000000000 microseconds (30 days).
 
-The location column is only populated for those states where ```latitude``` and ```longitude``` is part of the state attributes.
+### Only available with PosttGIS:
+The location column is populated for those states where ```latitude``` and ```longitude``` is part of the state attributes.
 
 ## Credits
 Big thanks to the authors of the [recorder component](https://github.com/home-assistant/home-assistant/tree/dev/homeassistant/components/recorder) for Home Assistant for a great starting point code-wise!

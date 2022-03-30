@@ -15,6 +15,7 @@ from sqlalchemy.schema import Index
 from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geometry
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import column_property
 
 # SQLAlchemy Schema
 # pylint: disable=invalid-name
@@ -32,24 +33,39 @@ class LTSS(Base):  # type: ignore
     entity_id = Column(String(255))
     state = Column(String(255), index=True)
     attributes = Column(JSONB)
-    location = Column(Geometry('POINT', srid=4326))
+    location = None  # when not activated, no location column will be added to the table/database
 
-    @staticmethod
-    def from_event(event):
+    @classmethod
+    def activate_location_extraction(cls):
+        """
+        Method to activate proper Postgis handling of location.
+
+        After activation, this cannot be deactivated (due to how the underlying SQLAlchemy ORM works).
+        """
+        cls.location = column_property(Column(Geometry('POINT', srid=4326)))
+
+    @classmethod
+    def from_event(cls, event):
         """Create object from a state_changed event."""
         entity_id = event.data["entity_id"]
         state = event.data.get("new_state")
 
         attrs = dict(state.attributes)
-        lat = attrs.pop('latitude', None)
-        lon = attrs.pop('longitude', None)
+
+        location = None
+
+        if cls.location:  # if the additional column exists, use Postgis' Geometry/Point data structure
+            lat = attrs.pop('latitude', None)
+            lon = attrs.pop('longitude', None)
+
+            location = f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
 
         row = LTSS(
             entity_id=entity_id,
             time=event.time_fired,
             state=state.state,
             attributes=attrs,
-            location=f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
+            location=location
         )
 
         return row
