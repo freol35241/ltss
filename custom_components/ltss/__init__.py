@@ -11,9 +11,11 @@ import json
 from typing import Any, Dict, Optional, Callable
 
 import voluptuous as vol
-from sqlalchemy import exc, create_engine, inspect
+from sqlalchemy import exc, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import scoped_session, sessionmaker
+
+import psycopg2
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -36,8 +38,6 @@ from homeassistant.helpers.entityfilter import (
 from homeassistant.helpers.typing import ConfigType
 import homeassistant.util.dt as dt_util
 from homeassistant.helpers.json import JSONEncoder
-
-from sqlalchemy import text
 
 from .models import Base, LTSS
 from .migrations import check_and_migrate
@@ -287,21 +287,19 @@ class LTSS_DB(threading.Thread):
                 self._create_table(available_extensions)
 
             if 'timescaledb' in available_extensions:
-
-                # timescaledb's table/column name changed with v2
-                if int(available_extensions['timescaledb'].split('.')[0]) >= 2:
-                    query = f"SELECT 1 FROM timescaledb_information.hypertables "
-                    f"WHERE hypertable_name = '{LTSS.__tablename__}'"
-                else:
-                    query = f"SELECT 1 FROM timescaledb_information.hypertable "
-                    f"WHERE table_name = '{LTSS.__tablename__}'"
-
-                # only if LTSS table is a hypertable, set/update chunk_time_interval
-                if 1 == con.execute(query).rowcount:
+                # chunk_time_interval can be adjusted even after first setup
+                try:
                     con.execute(
                         text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})")
                             .execution_options(autocommit=True)
-                )
+                    )
+                except exc.ProgrammingError as exception:
+                    if isinstance(exception.orig, psycopg2.errors.UndefinedTable):
+                        # The table does exist but is not a hypertable, not much we can do except log that fact
+                        _LOGGER.exception(
+                            "TimescaleDB is available as an extension but the LTSS table is not a hypertable!")
+                    else:
+                        raise
 
         # check if table has been set up with location extraction
         if "location" in [column_conf["name"] for column_conf in inspector.get_columns(LTSS.__tablename__)]:
@@ -314,8 +312,10 @@ class LTSS_DB(threading.Thread):
         self.get_session = scoped_session(sessionmaker(bind=self.engine))
 
     def _create_table(self, available_extensions):
+        _LOGGER.info("Creating LTSS table")
         with self.engine.connect() as con:
             if 'postgis' in available_extensions:
+                _LOGGER.info("PostGIS extension is available, activating location extraction...")
                 con.execute(
                     text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
                          ).execution_options(autocommit=True))
@@ -326,6 +326,7 @@ class LTSS_DB(threading.Thread):
             Base.metadata.create_all(self.engine)
 
             if 'timescaledb' in available_extensions:
+                _LOGGER.info("TimescaleDB extension is available, creating hypertable...")
                 con.execute(
                     text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
                          ).execution_options(autocommit=True))
