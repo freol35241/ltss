@@ -14,6 +14,7 @@ Enabling simple long time state storage (LTSS) for your sensor states in a Postg
 The following extensions are required for full functionality:
 * TimescaleDB
 * PostGIS
+* Ltree
 
 LTSS automatically detects the available extensions and creates the necessary table accordingly. A PostgeSQL instance without those extensions can be used but will lack some features: efficient storing and accessing time-series data (without TimescaleDB) and directly accessing geolocation data of logged data (without PostGis).
 
@@ -45,7 +46,7 @@ configuration.yaml
 
         ltss:
             db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
-            chunk_time_interval: 2592000000000
+            chunk_time_interval: 604800000000
             include:
                 domains:
                 - sensor
@@ -66,7 +67,11 @@ configuration.yaml
 
         chunk_time_interval
         (int)(Optional)
-        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
+        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 604800000000 (7 days). Ignored for databases without TimescaleDB extension.
+
+        chunk_compression_after
+        (int)(Optional)
+        The time interval after which TimescaleDB will compress old chunks in microseconds. Defaults to 1209600000000 (14 days). Ignored for databases without TimescaleDB extension.
 
         exclude
         (map)(Optional)

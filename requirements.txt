@@ -1,3 +1,4 @@
 GeoAlchemy2==0.13.1
 psycopg2==2.9.5
+sqlalchemy-utils==0.40.0
 SQLAlchemy # Pinned by HA version
