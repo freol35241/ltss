@@ -279,7 +279,8 @@ class LTSS_DB(threading.Thread):
         inspector = inspect(self.engine)
 
         with self.engine.connect() as con:
-            available_extensions = {row['name']: row['installed_version'] for row in
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
+            available_extensions = {row.name: row.installed_version for row in
                                     con.execute(text("SELECT name, installed_version FROM pg_available_extensions"))}
 
             # create table if necessary
@@ -291,7 +292,6 @@ class LTSS_DB(threading.Thread):
                 try:
                     con.execute(
                         text(f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})")
-                            .execution_options(autocommit=True)
                     )
                 except exc.ProgrammingError as exception:
                     if isinstance(exception.orig, psycopg2.errors.UndefinedTable):
@@ -314,11 +314,12 @@ class LTSS_DB(threading.Thread):
     def _create_table(self, available_extensions):
         _LOGGER.info("Creating LTSS table")
         with self.engine.connect() as con:
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
             if 'postgis' in available_extensions:
                 _LOGGER.info("PostGIS extension is available, activating location extraction...")
                 con.execute(
                     text("CREATE EXTENSION IF NOT EXISTS postgis CASCADE"
-                         ).execution_options(autocommit=True))
+                         ))
 
                 # activate location extraction in model/ORM to add necessary column when calling create_all()
                 LTSS.activate_location_extraction()
@@ -329,13 +330,13 @@ class LTSS_DB(threading.Thread):
                 _LOGGER.info("TimescaleDB extension is available, creating hypertable...")
                 con.execute(
                     text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
-                         ).execution_options(autocommit=True))
+                         ))
 
                 # Create hypertable
                 con.execute(text(f"""SELECT create_hypertable(
                                 '{LTSS.__tablename__}', 
                                 'time', 
-                                if_not_exists => TRUE);""").execution_options(autocommit=True))
+                                if_not_exists => TRUE);"""))
 
     def _close_connection(self):
         """Close the connection."""

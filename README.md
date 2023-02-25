@@ -1,6 +1,8 @@
 Long time state storage (LTSS) custom component for Home Assistant
 ========================================
 
+**NOTE:** From version 2.0 LTSS requires at least Home Assistant 2023.3
+
 **NOTE:** Starting 2020-09-13 attributes are stored with type JSONB instead of as a plain string, in addition a GIN index is created on this column by default. At first startup after updating of LTSS, migration of your DB happens automatically. Note that this can take a couple of minutes and HASS will not finish starting (i.e. frontend will not be available) until migration is done.
 
 **WARNING:** I take no responsibility for any data loss that may happen as a result of this. Please make sure to backup your data before upgrading!
