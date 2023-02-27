@@ -28,9 +28,7 @@
     },
     "remoteUser": "vscode",
     "features": {
-        "rust": "latest"
-    },
-    "mounts": [
-        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-    ]
+        "rust": "latest",
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    }
 }
