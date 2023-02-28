@@ -88,9 +88,9 @@ class TestDBSetup:
 
     @staticmethod
     def _is_hypertable(con):
-        timescaledb_version = con.execute("SELECT installed_version "
+        timescaledb_version = con.execute(text("SELECT installed_version "
                                           "FROM pg_available_extensions "
-                                          "WHERE name = 'timescaledb'").scalar()
+                                          "WHERE name = 'timescaledb'")).scalar()
 
         # timescaledb's table/column name changed with v2
         if int(timescaledb_version.split('.')[0]) >= 2:
@@ -100,7 +100,7 @@ class TestDBSetup:
             query = f"SELECT 1 FROM timescaledb_information.hypertable "
             f"WHERE table_name = '{LTSS.__tablename__}'"
 
-        return 1 == con.execute(query).rowcount
+        return 1 == con.execute(text(query)).rowcount
 
     @staticmethod
     def _has_columns(con):
