@@ -1,12 +1,12 @@
 {
   "domain": "ltss",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "name": "Long Time State Storage (LTSS)",
   "documentation": "https://github.com/freol35241/ltss",
   "requirements": [
     "sqlalchemy>=2.0,<3.0",
     "psycopg2>=2.8,<3.0",
-    "geoalchemy2>=0.8,<1.0"
+    "geoalchemy2>=0.13,<1.0"
   ],
   "dependencies": [],
   "codeowners": [
