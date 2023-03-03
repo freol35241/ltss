@@ -1,28 +1,22 @@
 """Support for recording details."""
 import asyncio
 import concurrent.futures
-from contextlib import contextmanager
-from datetime import datetime, timedelta
 import logging
 import queue
 import threading
 import time
 import json
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable
 
 import voluptuous as vol
 from sqlalchemy import exc, create_engine, inspect, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.dialects.postgresql import insert
 
 import psycopg2
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
-    CONF_DOMAINS,
-    CONF_ENTITIES,
-    CONF_EXCLUDE,
-    CONF_INCLUDE,
     EVENT_HOMEASSISTANT_START,
     EVENT_HOMEASSISTANT_STOP,
     EVENT_STATE_CHANGED,
@@ -39,7 +33,7 @@ from homeassistant.helpers.typing import ConfigType
 import homeassistant.util.dt as dt_util
 from homeassistant.helpers.json import JSONEncoder
 
-from .models import Base, LTSS
+from .models import Base, LTSS, LTSS_ATTRIBUTES
 from .migrations import check_and_migrate
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,6 +42,7 @@ DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
+CONF_CHUNK_COMPRESSION_AFTER = "chunk_compression_after"
 
 CONNECT_RETRY_WAIT = 3
 
@@ -57,8 +52,11 @@ CONFIG_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_DB_URL): cv.string,
                 vol.Optional(
-                    CONF_CHUNK_TIME_INTERVAL, default=2592000000000
-                ): cv.positive_int,  # 30 days
+                    CONF_CHUNK_TIME_INTERVAL, default=604800000000
+                ): cv.positive_int,  # 7 days
+                vol.Optional(
+                    CONF_CHUNK_COMPRESSION_AFTER, default=1209600000000
+                ): cv.positive_int # 14 days
             }
         )
     },
@@ -72,12 +70,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     db_url = conf.get(CONF_DB_URL)
     chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
+    chunk_compression_after = conf.get(CONF_CHUNK_COMPRESSION_AFTER)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
         chunk_time_interval=chunk_time_interval,
+        chunk_compression_after=chunk_compression_after,
         entity_filter=entity_filter,
     )
     instance.async_initialize()
@@ -94,6 +94,7 @@ class LTSS_DB(threading.Thread):
         hass: HomeAssistant,
         uri: str,
         chunk_time_interval: int,
+        chunk_compression_after: int,
         entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
@@ -104,6 +105,7 @@ class LTSS_DB(threading.Thread):
         self.recording_start = dt_util.utcnow()
         self.db_url = uri
         self.chunk_time_interval = chunk_time_interval
+        self.chunk_compression_after = chunk_compression_after
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
         self.run_info: Any = None
@@ -206,11 +208,22 @@ class LTSS_DB(threading.Thread):
                     with self.get_session() as session:
                         with session.begin():
                             try:
-                                row = LTSS.from_event(event)
+                                row, attributes_row = LTSS.from_event(event)
+                                # Insert the actual attributes first for the
+                                # internal trigger to work
+                                stmt = insert(
+                                    LTSS_ATTRIBUTES.__table__
+                                ).values(
+                                    attributes_row
+                                )
+                                session.execute(
+                                    stmt.on_conflict_do_nothing()
+                                )
                                 session.add(row)
-                            except (TypeError, ValueError):
+                            except (TypeError, ValueError) as e:
                                 _LOGGER.warning(
-                                    "State is not JSON serializable: %s",
+                                    "State is not JSON serializable: %s => %s",
+                                    e,
                                     event.data.get("new_state"),
                                 )
 
@@ -319,6 +332,17 @@ class LTSS_DB(threading.Thread):
                 # activate location extraction in model/ORM to add necessary column when calling create_all()
                 LTSS.activate_location_extraction()
 
+            if 'ltree' not in available_extensions:
+                _LOGGER.error("ltree extension is required, but not found...")
+
+            if 'ltree' in available_extensions:
+                _LOGGER.info("ltree extension is available, enabling it...")
+                con.execute(
+                    text(
+                        "CREATE EXTENSION IF NOT EXISTS ltree CASCADE"
+                    )
+                )
+
             Base.metadata.create_all(self.engine)
 
             if "timescaledb" in available_extensions:
@@ -334,6 +358,18 @@ class LTSS_DB(threading.Thread):
                                 '{LTSS.__tablename__}',
                                 'time',
                                 if_not_exists => TRUE);"""
+                    )
+                )
+                con.execute(
+                    text(
+                        f"""ALTER TABLE {LTSS.__tablename__} SET (timescaledb.compress,  
+                            timescaledb.compress_orderby = 'time, entity_id')"""
+                    )
+                )
+                con.execute(
+                    text(
+                        f"""SELECT add_compression_policy('{LTSS.__tablename__}'::regclass,
+                                compress_after := ((interval '1us') * {self.chunk_compression_after}))"""
                     )
                 )
 

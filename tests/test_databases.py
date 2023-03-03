@@ -51,6 +51,7 @@ class TestDBSetup:
             "postgresql://postgres@localhost:"
             + container.ports["5432/tcp"][0]["HostPort"],
             123,
+            456,
             lambda x: False,
         )
 
@@ -70,7 +71,6 @@ class TestDBSetup:
     @pytest.mark.parametrize(
         "version",
         [
-            "latest-pg9.6",
             "latest-pg10",
             "latest-pg11",
             "latest-pg12",

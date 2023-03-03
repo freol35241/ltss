@@ -1,20 +1,22 @@
 """Models for SQLAlchemy."""
-import json
-from datetime import datetime
+from datetime import datetime, date
 import logging
 
 from sqlalchemy import (
     Column,
-    BigInteger,
     DateTime,
-    String,
     Text,
+    BIGINT
 )
 
 from sqlalchemy.schema import Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ExcludeConstraint
+from sqlalchemy_utils import LtreeType, Ltree
 from geoalchemy2 import Geometry
 from sqlalchemy.orm import column_property, declarative_base
+import json
+import hashlib
+import re
 
 # SQLAlchemy Schema
 # pylint: disable=invalid-name
@@ -23,15 +25,20 @@ Base = declarative_base()
 _LOGGER = logging.getLogger(__name__)
 
 
+def datetime_json_encoder(o):
+    if isinstance(o, (datetime, date)):
+        return o.isoformat()
+    raise TypeError("Type %s not serializable" % type(o))
+
+
 class LTSS(Base):  # type: ignore
     """State change history."""
 
-    __tablename__ = "ltss"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    __tablename__ = "ltss_hass"
     time = Column(DateTime(timezone=True), default=datetime.utcnow, primary_key=True)
-    entity_id = Column(String(255))
-    state = Column(String(255), index=True)
-    attributes = Column(JSONB)
+    entity_id = Column(Text, primary_key=True)
+    state = Column(Text)
+    attributes_key = Column(LtreeType)
     location = None  # when not activated, no location column will be added to the table/database
 
     @classmethod
@@ -59,17 +66,44 @@ class LTSS(Base):  # type: ignore
 
             location = f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
 
+        state_json = json.dumps(attrs, default=datetime_json_encoder)
+        attributes_key_data = re.sub(r'\\n', '', state_json)
+        attributes_key = Ltree(f"{entity_id}.{hashlib.sha256(attributes_key_data.encode()).hexdigest()}")
+
         row = LTSS(
             entity_id=entity_id,
             time=event.time_fired,
             state=state.state,
-            attributes=attrs,
+            attributes_key=attributes_key,
             location=location
         )
 
-        return row
+        attributes_row = {
+            "attributes_key": attributes_key,
+            "attributes": state_json
+        }
 
-LTSS_attributes_index = Index('ltss_attributes_idx', LTSS.attributes, postgresql_using='gin')
-LTSS_entityid_time_composite_index = Index(
-    'ltss_entityid_time_composite_idx', LTSS.entity_id, LTSS.time.desc()
+        return row, attributes_row
+
+
+LTSS_time_entityid_composite_index = Index(
+    'ltss_hass_time_entity_id_idx', LTSS.time.desc(), LTSS.entity_id, postgresql_using='btree'
+)
+
+
+class LTSS_ATTRIBUTES(Base):
+    __tablename__ = f'{LTSS.__tablename__}_attributes'
+    attributes_key = Column(LtreeType)
+    attributes = Column(JSONB)
+    ref_count = Column(BIGINT)
+    __table_args__ = (
+        ExcludeConstraint((attributes_key, '=')),
+    )
+    __mapper_args__ = {
+        "primary_key": [attributes_key]
+    }
+
+
+LTSS_ATTRIBUTES_attributes_index = Index(
+    'ltss_hass_attributes_attributes_idx', LTSS_ATTRIBUTES.attributes, postgresql_using='gin'
 )
