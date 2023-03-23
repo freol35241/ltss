@@ -14,8 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.schema import Index
 from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geometry
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import column_property
+from sqlalchemy.orm import column_property, declarative_base
 
 # SQLAlchemy Schema
 # pylint: disable=invalid-name
