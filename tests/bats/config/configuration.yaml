@@ -1,0 +1,11 @@
+# https://www.home-assistant.io/integrations/default_config/
+default_config:
+
+ltss:
+  db_url: postgresql://postgres@localhost:5432
+
+# https://www.home-assistant.io/integrations/logger/
+logger:
+  default: info
+  logs:
+    custom_components.ltss: debug
