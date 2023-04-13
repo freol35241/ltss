@@ -1,14 +1,22 @@
 {
     "name": "ltss_devcontainer",
     "image": "mcr.microsoft.com/vscode/devcontainers/python:0-3.10-bullseye",
-    "postCreateCommand": "pip install --requirement requirements.dev.txt",
+    "remoteUser": "vscode",
+    "features": {
+        "rust": "latest",
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+        "ghcr.io/edouard-lopez/devcontainer-features/bats:0": {}
+    },
+    "postCreateCommand": "pip install --requirement requirements.dev.txt && bash .devcontainer/install-bats-helpers.sh",
     "forwardPorts": [
         8123
     ],
     "customizations": {
         "vscode": {
             "extensions": [
-                "ms-python.python"
+                "ms-python.python",
+                "jetmartin.bats@0.1.9",
+                "timonwong.shellcheck@0.29.4"
             ],
             "settings": {
                 "files.eol": "\n",
@@ -25,10 +33,5 @@
                 "files.trimTrailingWhitespace": true
             }
         }
-    },
-    "remoteUser": "vscode",
-    "features": {
-        "rust": "latest",
-        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
     }
 }

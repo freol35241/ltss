@@ -41,7 +41,7 @@ class LTSS(Base):  # type: ignore
 
         After activation, this cannot be deactivated (due to how the underlying SQLAlchemy ORM works).
         """
-        cls.location = column_property(Column(Geometry('POINT', srid=4326)))
+        cls.location = column_property(Column(Geometry("POINT", srid=4326)))
 
     @classmethod
     def from_event(cls, event):
@@ -53,23 +53,28 @@ class LTSS(Base):  # type: ignore
 
         location = None
 
-        if cls.location:  # if the additional column exists, use Postgis' Geometry/Point data structure
-            lat = attrs.pop('latitude', None)
-            lon = attrs.pop('longitude', None)
+        if (
+            cls.location
+        ):  # if the additional column exists, use Postgis' Geometry/Point data structure
+            lat = attrs.pop("latitude", None)
+            lon = attrs.pop("longitude", None)
 
-            location = f'SRID=4326;POINT({lon} {lat})' if lon and lat else None
+            location = f"SRID=4326;POINT({lon} {lat})" if lon and lat else None
 
         row = LTSS(
             entity_id=entity_id,
             time=event.time_fired,
             state=state.state,
             attributes=attrs,
-            location=location
+            location=location,
         )
 
         return row
 
-LTSS_attributes_index = Index('ltss_attributes_idx', LTSS.attributes, postgresql_using='gin')
+
+LTSS_attributes_index = Index(
+    "ltss_attributes_idx", LTSS.attributes, postgresql_using="gin"
+)
 LTSS_entityid_time_composite_index = Index(
-    'ltss_entityid_time_composite_idx', LTSS.entity_id, LTSS.time.desc()
+    "ltss_entityid_time_composite_idx", LTSS.entity_id, LTSS.time.desc()
 )
