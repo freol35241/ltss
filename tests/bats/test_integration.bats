@@ -146,3 +146,48 @@ teardown() {
     assert_line --partial "TimescaleDB extension is available, creating hypertable..."
     assert_line --partial "Setup of domain ltss took"
 }
+
+@test "Testing any migrations that needs performing since last release" {
+
+    _start_db_container "timescale/timescaledb:2.10.1-pg15"
+
+    # Setup configuration directory using a freshly checked out version of ltss (latest version)
+    cp "${REPO_ROOT}/tests/bats/config/configuration.yaml" "${TMP_HA_CONFIG_DIR}/"
+    latest_release=$(git describe --tags --abbrev=0)
+    tmp_clone_dir="$(temp_make)"
+    git clone --depth 1 --branch "${latest_release}" 'https://github.com/freol35241/ltss.git' "${tmp_clone_dir}"
+    cp -r "${tmp_clone_dir}/custom_components/" "${TMP_HA_CONFIG_DIR}/"
+    rm -rf "$tmp_clone_dir"
+
+    echo "Running HA using LTSS: ${latest_release}"
+
+    run _run_hass "${TMP_HA_CONFIG_DIR}"
+
+    echo "$output"
+
+    # First of all, HA must have started successfully
+    assert_line --partial "Home Assistant initialized in"
+
+    # Secondly, lets check that LTSS was setup as expected
+    assert_line --partial "We found a custom integration ltss which has not been tested by Home Assistant."
+    assert_line --partial "Creating LTSS table"
+    assert_line --partial "Setup of domain ltss took"
+
+    # Now, lets replace the custom component with the current version of ltss
+    cp -r "${REPO_ROOT}/custom_components/" "${TMP_HA_CONFIG_DIR}/"
+
+    # And run HA again
+    current_commit_hash=$(git rev-parse --short HEAD)
+    echo "Running HA using LTSS: ${current_commit_hash}"
+    run _run_hass "${TMP_HA_CONFIG_DIR}"
+
+    echo "$output"
+
+    # First of all, HA must have started successfully
+    assert_line --partial "Home Assistant initialized in"
+
+    # Secondly, lets check that LTSS was setup as expected
+    assert_line --partial "We found a custom integration ltss which has not been tested by Home Assistant."
+    assert_line --partial "Setup of domain ltss took"
+    refute_line --partial "ERROR (LTSS)"
+}
