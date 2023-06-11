@@ -52,19 +52,22 @@ def check_and_migrate(engine):
             "Migrating you LTSS table to the latest schema, this might take a couple of minutes!"
         )
         with engine.begin() as con:
-            con.execute(text(
+            con.execute(
+                text(
                     f"""ALTER TABLE {LTSS.__tablename__}
                         DROP CONSTRAINT {LTSS.__tablename__}_pkey CASCADE,
                         ADD PRIMARY KEY(time,entity_id);"""
-                )    
+                )
             )
-            con.execute(text(
+            con.execute(
+                text(
                     f"""ALTER TABLE {LTSS.__tablename__}
                         DROP COLUMN id"""
-                )    
+                )
             )
             con.commit()
-        _LOGGER.info('Migration completed successfully!')
+        _LOGGER.info("Migration completed successfully!")
+
 
 def migrate_attributes_text_to_jsonb(engine):
     with engine.connect() as con:

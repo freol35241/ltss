@@ -28,7 +28,7 @@ class LTSS(Base):  # type: ignore
 
     __tablename__ = "ltss"
     time = Column(DateTime(timezone=True), default=datetime.utcnow, primary_key=True)
-    entity_id = Column(String(255),primary_key=True)
+    entity_id = Column(String(255), primary_key=True)
     state = Column(String(255), index=True)
     attributes = Column(JSONB)
     location = None  # when not activated, no location column will be added to the table/database
