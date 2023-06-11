@@ -103,11 +103,11 @@ configuration.yaml
 ## Details
 The states are stored in a single table ([hypertable](https://docs.timescale.com/latest/using-timescaledb/hypertables), when TimescaleDB is available) with the following layout:
 
-| Column name: | id | time | entity_id | state | attributes | location [PostGIS-only] |
-|:---|:---:|:---:|:---:|:---:|:---:|:-----------------------:|
-| Type: | bigint | timestamp with timezone | string | string | JSONB |       POINT(4326)       |
+| Column name: | time | entity_id | state | attributes | location [PostGIS-only] |
+|:---:|:---:|:---:|:---:|:---:|:-----------------------:|
+| Type: | timestamp with timezone | string | string | JSONB |       POINT(4326)       |
 | Primary key: | x | x |  |  |  |
-| Index: | x | x | x | x | x |                         |
+| Index: | x | x | x | x |                         |
 
 ### Only available with TimescaleDB:
 [Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is configurable using the `chunk_time_interval` config option. It defaults to 2592000000000 microseconds (30 days).

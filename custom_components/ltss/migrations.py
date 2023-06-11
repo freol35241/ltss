@@ -46,6 +46,13 @@ def check_and_migrate(engine):
             _LOGGER.warning("Index on entity_id no longer needed, dropping...")
             drop_entityid_index(engine)
 
+    # id column?
+    if any(col["name"] == "id" for col in columns):
+        _LOGGER.warning(
+            "Migrating you LTSS table to the latest schema, this might take a couple of minutes!"
+        )
+        remove_id_column(engine)
+
 
 def migrate_attributes_text_to_jsonb(engine):
     with engine.connect() as con:
@@ -75,3 +82,22 @@ def drop_entityid_index(engine):
                 autocommit=True
             )
         )
+
+
+def remove_id_column(engine):
+    with engine.begin() as con:
+        con.execute(
+            text(
+                f"""ALTER TABLE {LTSS.__tablename__}
+                    DROP CONSTRAINT {LTSS.__tablename__}_pkey CASCADE,
+                    ADD PRIMARY KEY(time,entity_id);"""
+            )
+        )
+        con.execute(
+            text(
+                f"""ALTER TABLE {LTSS.__tablename__}
+                    DROP COLUMN id"""
+            )
+        )
+        con.commit()
+    _LOGGER.info("Migration completed successfully!")

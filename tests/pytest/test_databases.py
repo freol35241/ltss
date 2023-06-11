@@ -128,7 +128,7 @@ class TestDBSetup:
     @staticmethod
     def _has_columns(con):
         return (
-            5
+            4
             <= con.execute(
                 text(
                     f"SELECT COLUMN_NAME\
