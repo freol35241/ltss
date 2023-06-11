@@ -45,7 +45,7 @@ configuration.yaml
 
         ltss:
             db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
-            chunk_time_interval: 2592000000000
+            chunk_time_interval: 604800000000
             include:
                 domains:
                 - sensor
@@ -66,7 +66,7 @@ configuration.yaml
 
         chunk_time_interval
         (int)(Optional)
-        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
+        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 604800000000 (7 days). Ignored for databases without TimescaleDB extension.
 
         exclude
         (map)(Optional)
@@ -103,14 +103,14 @@ configuration.yaml
 ## Details
 The states are stored in a single table ([hypertable](https://docs.timescale.com/latest/using-timescaledb/hypertables), when TimescaleDB is available) with the following layout:
 
-| Column name: | id | time | entity_id | state | attributes | location [PostGIS-only] |
-|:---|:---:|:---:|:---:|:---:|:---:|:-----------------------:|
-| Type: | bigint | timestamp with timezone | string | string | JSONB |       POINT(4326)       |
+| Column name: | time | entity_id | state | attributes | location [PostGIS-only] |
+|:---:|:---:|:---:|:---:|:---:|:-----------------------:|
+| Type: | timestamp with timezone | string | string | JSONB |       POINT(4326)       |
 | Primary key: | x | x |  |  |  |
-| Index: | x | x | x | x | x |                         |
+| Index: | x | x | x | x |                         |
 
 ### Only available with TimescaleDB:
-[Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is configurable using the `chunk_time_interval` config option. It defaults to 2592000000000 microseconds (30 days).
+[Chunk size](https://docs.timescale.com/latest/using-timescaledb/hypertables#best-practices) of the hypertable is configurable using the `chunk_time_interval` config option. It defaults to 604800000000 microseconds (7 days).
 
 ### Only available with PosttGIS:
 The location column is populated for those states where ```latitude``` and ```longitude``` is part of the state attributes.

@@ -57,7 +57,7 @@ CONFIG_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_DB_URL): cv.string,
                 vol.Optional(
-                    CONF_CHUNK_TIME_INTERVAL, default=2592000000000
+                    CONF_CHUNK_TIME_INTERVAL, default=604800000000
                 ): cv.positive_int,  # 30 days
             }
         )
