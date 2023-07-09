@@ -51,6 +51,8 @@ class TestDBSetup:
             "postgresql://postgres@localhost:"
             + container.ports["5432/tcp"][0]["HostPort"],
             123,
+            3.0,
+            10,
             lambda x: False,
         )
 
