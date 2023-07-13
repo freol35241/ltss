@@ -89,7 +89,7 @@ def remove_id_column(engine):
         con.execute(
             text(
                 f"""ALTER TABLE {LTSS.__tablename__}
-                    DROP CONSTRAINT {LTSS.__tablename__}_pkey CASCADE,
+                    DROP CONSTRAINT IF EXISTS {LTSS.__tablename__}_pkey CASCADE,
                     ADD PRIMARY KEY(time,entity_id);"""
             )
         )
