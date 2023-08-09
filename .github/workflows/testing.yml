@@ -30,6 +30,8 @@ jobs:
 
       - name: Checkout (GitHub)
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetches all history of all tags and branches, necessary for running migration tests
 
       - name: Build and run Dev Container task
         uses: devcontainers/ci@v0.3
