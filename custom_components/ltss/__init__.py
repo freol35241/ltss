@@ -228,6 +228,10 @@ class LTSS_DB(threading.Thread):
                 except exc.SQLAlchemyError:
                     updated = True
                     _LOGGER.exception("Error saving event: %s", event)
+                    
+                except:
+                    updated = True
+                    _LOGGER.exception("Error during saving event: %s", event)     
 
             if not updated:
                 _LOGGER.error(
