@@ -1,3 +1,3 @@
 GeoAlchemy2==0.15.2
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 SQLAlchemy # Pinned by HA version
