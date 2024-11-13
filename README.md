@@ -64,6 +64,14 @@ configuration.yaml
         (string)(Required)
         The URL that points to your database.
 
+        db_retry_wait
+        (float)(Optional)
+        Time to wait between DB reconnects.
+
+        db_retry_limit
+        (int)(Optional)
+        Max number of times to retry DB reconnect on startup. Defaults to 10. If set to `null` (without quotes) LTSS will try to reconnect to the DB indefinitely. Note that this setting applies only to LTSS startup; during normal operation LTSS will retry 10 times and then drop the write to prevent filling up the internal queue.
+
         chunk_time_interval
         (int)(Optional)
         The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
