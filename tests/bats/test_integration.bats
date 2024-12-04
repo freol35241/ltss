@@ -30,17 +30,17 @@ _run_hass () {
     echo "Starting HA with configuration directory: ${config_dir}"
     hass --skip-pip -c "$config_dir" 3>&- 2>&1 & hass_pid=$!
 
-    sleep 1
-
     # Listen for successful startup (allowing maximum 120 seconds) by tailing the log file
-    tail -f "${config_dir}/home-assistant.log" | timeout 120s grep --line-buffered -m 1 "Home Assistant initialized in"
+    log_file="${config_dir}/home-assistant.log"
+    touch "${log_file}" # Make sure the file exists so we can tail it...
+    tail -f -n +1 "${log_file}" | timeout 120s grep --line-buffered -m 1 "Home Assistant initialized in"
 
     # Kill the subprocess
     kill "$hass_pid"
 
     # Read log file
     local logs
-    logs="$(cat "${config_dir}/home-assistant.log")"
+    logs="$(cat "${log_file}")"
     echo "$logs"
 }
 
