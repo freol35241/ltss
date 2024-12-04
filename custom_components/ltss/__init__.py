@@ -1,4 +1,5 @@
 """Support for recording details."""
+
 import asyncio
 import concurrent.futures
 from contextlib import contextmanager
@@ -228,10 +229,10 @@ class LTSS_DB(threading.Thread):
                 except exc.SQLAlchemyError:
                     updated = True
                     _LOGGER.exception("Error saving event: %s", event)
-                    
-                except:
+
+                except Exception:
                     updated = True
-                    _LOGGER.exception("Error during saving event: %s", event)     
+                    _LOGGER.exception("Error during saving of event: %s", event)
 
             if not updated:
                 _LOGGER.error(
@@ -285,7 +286,8 @@ class LTSS_DB(threading.Thread):
                 try:
                     con.execute(
                         text(
-                            f"SELECT set_chunk_time_interval('{LTSS.__tablename__}', {self.chunk_time_interval})"
+                            f"""SELECT set_chunk_time_interval('{LTSS.__tablename__}', {
+                                self.chunk_time_interval})"""
                         )
                     )
                 except exc.ProgrammingError as exception:
