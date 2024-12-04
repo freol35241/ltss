@@ -1,4 +1,5 @@
 """Models for SQLAlchemy."""
+
 import json
 from datetime import datetime
 import logging
