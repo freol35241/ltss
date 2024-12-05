@@ -1,3 +1,3 @@
 docker==7.1.0
-pytest-homeassistant-custom-component==0.13.189
+pytest-homeassistant-custom-component==0.13.190
 pytest # Version is pinned by pytest-homeassistant-custom-component (??)
