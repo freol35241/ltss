@@ -66,7 +66,7 @@ configuration.yaml
 
         chunk_time_interval
         (int)(Optional)
-        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
+        The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (3 days). Ignored for databases without TimescaleDB extension.
 
         exclude
         (map)(Optional)
