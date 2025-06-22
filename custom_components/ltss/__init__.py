@@ -49,6 +49,9 @@ DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
+CONF_BATCH_SIZE = "batch_size"
+CONF_BATCH_TIMEOUT_MS = "batch_timeout_ms"
+CONF_POLL_INTERVAL_MS = "poll_interval_ms"
 
 CONNECT_RETRY_WAIT = 3
 
@@ -60,6 +63,9 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_CHUNK_TIME_INTERVAL, default=2592000000000
                 ): cv.positive_int,  # 30 days
+                vol.Optional(CONF_BATCH_SIZE, default=100): vol.Range(min=1, max=10000),
+                vol.Optional(CONF_BATCH_TIMEOUT_MS, default=2000): vol.Range(min=100, max=60000),
+                vol.Optional(CONF_POLL_INTERVAL_MS, default=500): vol.Range(min=10, max=1000),
             }
         )
     },
@@ -73,12 +79,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     db_url = conf.get(CONF_DB_URL)
     chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
+    batch_size = conf.get(CONF_BATCH_SIZE)
+    batch_timeout_ms = conf.get(CONF_BATCH_TIMEOUT_MS)
+    poll_interval_ms = conf.get(CONF_POLL_INTERVAL_MS)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
         chunk_time_interval=chunk_time_interval,
+        batch_size=batch_size,
+        batch_timeout_ms=batch_timeout_ms,
+        poll_interval_ms=poll_interval_ms,
         entity_filter=entity_filter,
     )
     instance.async_initialize()
@@ -95,6 +107,9 @@ class LTSS_DB(threading.Thread):
         hass: HomeAssistant,
         uri: str,
         chunk_time_interval: int,
+        batch_size: int,
+        batch_timeout_ms: int,
+        poll_interval_ms: int,
         entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
@@ -108,6 +123,11 @@ class LTSS_DB(threading.Thread):
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
         self.run_info: Any = None
+
+        # batch processing config
+        self.batch_size = batch_size
+        self.batch_timeout_ms = batch_timeout_ms
+        self.poll_interval_ms = poll_interval_ms
 
         self.entity_filter = entity_filter
 
@@ -190,57 +210,137 @@ class LTSS_DB(threading.Thread):
         if result is shutdown_task:
             return
 
+        _LOGGER.info("Starting LTSS batch processing loop (batch_size=%d, timeout=%dms)", 
+                     self.batch_size, self.batch_timeout_ms)
+        
         while True:
-            event = self.queue.get()
-
-            if event is None:
+            batch = self._collect_batch()
+            
+            if not batch:
+                # Continue if no events collected - Could be empty queue
+                continue
+                
+            # Check if batch contains shutdown signal
+            shutdown_received = None in batch
+            if shutdown_received:
+                # Remove shutdown signal and process remaining events
+                actual_events = [event for event in batch if event is not None]
+                if actual_events:
+                    _LOGGER.debug("Processing final batch of %d events before shutdown", len(actual_events))
+                    self._process_batch(actual_events)
+                
                 self._close_connection()
-                self.queue.task_done()
                 return
+            
+            # Process normal batch
+            self._process_batch(batch)
 
-            tries = 1
-            updated = False
-            while not updated and tries <= 10:
-                if tries != 1:
-                    time.sleep(CONNECT_RETRY_WAIT)
-                try:
-                    with self.get_session() as session:
-                        with session.begin():
+    def _collect_batch(self):
+        """Collect batch events, supports triggering by count or timeout."""
+        batch = []
+        batch_start_time = None
+        poll_timeout = self.poll_interval_ms / 1000.0
+        
+        while len(batch) < self.batch_size:
+            try:
+                event = self.queue.get(timeout=poll_timeout)
+                
+                if event is None:  # shutdown signal
+                    _LOGGER.debug("Received shutdown signal, returning current batch of %d events", len(batch))
+                    batch.append(None)
+                    # Call task_done manually for shutdown signal as it won't be processed in batch
+                    self.queue.task_done()
+                    return batch
+                
+                if not batch_start_time:
+                    batch_start_time = time.time() * 1000
+                    _LOGGER.debug("Starting new batch collection")
+                
+                batch.append(event)
+                
+            except queue.Empty:
+                # Poll timeout - check if batch timeout is reached
+                if batch and self._is_batch_timeout(batch_start_time):
+                    _LOGGER.debug("Batch timeout reached, processing %d events", len(batch))
+                    break
+                # Continue polling if timeout not reached
+                
+        if batch:
+            _LOGGER.debug("Batch collection completed with %d events", len(batch))
+        
+        return batch
+
+    def _is_batch_timeout(self, batch_start_time):
+        """Check if the collecting batch has timed out."""
+        if batch_start_time is None:
+            return False
+        
+        current_time = time.time() * 1000
+        elapsed_time = current_time - batch_start_time
+        
+        return elapsed_time >= self.batch_timeout_ms
+
+    def _process_batch(self, batch):
+        """Process batch events and write to database."""
+        if not batch:
+            return
+            
+        batch_size = len(batch)
+        start_time = time.time()
+        
+        tries = 1
+        updated = False
+        while not updated and tries <= 10:
+            if tries != 1:
+                time.sleep(CONNECT_RETRY_WAIT)
+            try:
+                with self.get_session() as session:
+                    with session.begin():
+                        rows_added = 0
+                        for event in batch:
                             try:
                                 row = LTSS.from_event(event)
                                 session.add(row)
+                                rows_added += 1
                             except (TypeError, ValueError):
                                 _LOGGER.warning(
                                     "State is not JSON serializable: %s",
                                     event.data.get("new_state"),
                                 )
 
-                        updated = True
-
-                except exc.OperationalError as err:
-                    _LOGGER.error(
-                        "Error in database connectivity: %s. "
-                        "(retrying in %s seconds)",
-                        err,
-                        CONNECT_RETRY_WAIT,
-                    )
-                    tries += 1
-
-                except exc.SQLAlchemyError:
-                    updated = True
-                    _LOGGER.exception("Error saving event: %s", event)
-
-                except Exception:
-                    updated = True
-                    _LOGGER.exception("Error during saving of event: %s", event)
-
-            if not updated:
-                _LOGGER.error(
-                    "Error in database update. Could not save "
-                    "after %d tries. Giving up",
-                    tries,
+                updated = True
+                processing_time = (time.time() - start_time) * 1000
+                _LOGGER.debug(
+                    "Successfully processed batch of %d events (%d rows added) in %.2f ms",
+                    batch_size, rows_added, processing_time
                 )
 
+            except exc.OperationalError as err:
+                _LOGGER.error(
+                    "Error in database connectivity during batch processing: %s. "
+                    "(retrying in %s seconds)",
+                    err,
+                    CONNECT_RETRY_WAIT,
+                )
+                tries += 1
+
+            except exc.SQLAlchemyError:
+                updated = True
+                _LOGGER.exception("Error saving batch of %d events", batch_size)
+
+            except Exception:
+                updated = True
+                _LOGGER.exception("Error during saving of batch with %d events", batch_size)
+
+        if not updated:
+            _LOGGER.error(
+                "Error in database update. Could not save batch of %d events "
+                "after %d tries. Giving up",
+                batch_size, tries
+            )
+
+        # Mark all events as completed
+        for _ in batch:
             self.queue.task_done()
 
     @callback
