@@ -64,8 +64,12 @@ CONFIG_SCHEMA = vol.Schema(
                     CONF_CHUNK_TIME_INTERVAL, default=2592000000000
                 ): cv.positive_int,  # 30 days
                 vol.Optional(CONF_BATCH_SIZE, default=100): vol.Range(min=1, max=10000),
-                vol.Optional(CONF_BATCH_TIMEOUT_MS, default=2000): vol.Range(min=100, max=60000),
-                vol.Optional(CONF_POLL_INTERVAL_MS, default=500): vol.Range(min=10, max=1000),
+                vol.Optional(CONF_BATCH_TIMEOUT_MS, default=2000): vol.Range(
+                    min=100, max=60000
+                ),
+                vol.Optional(CONF_POLL_INTERVAL_MS, default=500): vol.Range(
+                    min=10, max=1000
+                ),
             }
         )
     },
@@ -88,10 +92,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         hass=hass,
         uri=db_url,
         chunk_time_interval=chunk_time_interval,
+        entity_filter=entity_filter,
         batch_size=batch_size,
         batch_timeout_ms=batch_timeout_ms,
         poll_interval_ms=poll_interval_ms,
-        entity_filter=entity_filter,
     )
     instance.async_initialize()
     instance.start()
@@ -107,10 +111,10 @@ class LTSS_DB(threading.Thread):
         hass: HomeAssistant,
         uri: str,
         chunk_time_interval: int,
-        batch_size: int,
-        batch_timeout_ms: int,
-        poll_interval_ms: int,
         entity_filter: Callable[[str], bool],
+        batch_size: int = 100,
+        batch_timeout_ms: int = 2000,
+        poll_interval_ms: int = 500,
     ) -> None:
         """Initialize the ltss."""
         threading.Thread.__init__(self, name="LTSS")
@@ -210,28 +214,34 @@ class LTSS_DB(threading.Thread):
         if result is shutdown_task:
             return
 
-        _LOGGER.info("Starting LTSS batch processing loop (batch_size=%d, timeout=%dms)", 
-                     self.batch_size, self.batch_timeout_ms)
-        
+        _LOGGER.info(
+            "Starting LTSS batch processing loop (batch_size=%d, timeout=%dms)",
+            self.batch_size,
+            self.batch_timeout_ms,
+        )
+
         while True:
             batch = self._collect_batch()
-            
+
             if not batch:
                 # Continue if no events collected - Could be empty queue
                 continue
-                
+
             # Check if batch contains shutdown signal
             shutdown_received = None in batch
             if shutdown_received:
                 # Remove shutdown signal and process remaining events
                 actual_events = [event for event in batch if event is not None]
                 if actual_events:
-                    _LOGGER.debug("Processing final batch of %d events before shutdown", len(actual_events))
+                    _LOGGER.debug(
+                        "Processing final batch of %d events before shutdown",
+                        len(actual_events),
+                    )
                     self._process_batch(actual_events)
-                
+
                 self._close_connection()
                 return
-            
+
             # Process normal batch
             self._process_batch(batch)
 
@@ -240,54 +250,59 @@ class LTSS_DB(threading.Thread):
         batch = []
         batch_start_time = None
         poll_timeout = self.poll_interval_ms / 1000.0
-        
+
         while len(batch) < self.batch_size:
             try:
                 event = self.queue.get(timeout=poll_timeout)
-                
+
                 if event is None:  # shutdown signal
-                    _LOGGER.debug("Received shutdown signal, returning current batch of %d events", len(batch))
+                    _LOGGER.debug(
+                        "Received shutdown signal, returning current batch of %d events",
+                        len(batch),
+                    )
                     batch.append(None)
                     # Call task_done manually for shutdown signal as it won't be processed in batch
                     self.queue.task_done()
                     return batch
-                
+
                 if not batch_start_time:
                     batch_start_time = time.time() * 1000
                     _LOGGER.debug("Starting new batch collection")
-                
+
                 batch.append(event)
-                
+
             except queue.Empty:
                 # Poll timeout - check if batch timeout is reached
                 if batch and self._is_batch_timeout(batch_start_time):
-                    _LOGGER.debug("Batch timeout reached, processing %d events", len(batch))
+                    _LOGGER.debug(
+                        "Batch timeout reached, processing %d events", len(batch)
+                    )
                     break
                 # Continue polling if timeout not reached
-                
+
         if batch:
             _LOGGER.debug("Batch collection completed with %d events", len(batch))
-        
+
         return batch
 
     def _is_batch_timeout(self, batch_start_time):
         """Check if the collecting batch has timed out."""
         if batch_start_time is None:
             return False
-        
+
         current_time = time.time() * 1000
         elapsed_time = current_time - batch_start_time
-        
+
         return elapsed_time >= self.batch_timeout_ms
 
     def _process_batch(self, batch):
         """Process batch events and write to database."""
         if not batch:
             return
-            
+
         batch_size = len(batch)
         start_time = time.time()
-        
+
         tries = 1
         updated = False
         while not updated and tries <= 10:
@@ -312,7 +327,9 @@ class LTSS_DB(threading.Thread):
                 processing_time = (time.time() - start_time) * 1000
                 _LOGGER.debug(
                     "Successfully processed batch of %d events (%d rows added) in %.2f ms",
-                    batch_size, rows_added, processing_time
+                    batch_size,
+                    rows_added,
+                    processing_time,
                 )
 
             except exc.OperationalError as err:
@@ -330,13 +347,16 @@ class LTSS_DB(threading.Thread):
 
             except Exception:
                 updated = True
-                _LOGGER.exception("Error during saving of batch with %d events", batch_size)
+                _LOGGER.exception(
+                    "Error during saving of batch with %d events", batch_size
+                )
 
         if not updated:
             _LOGGER.error(
                 "Error in database update. Could not save batch of %d events "
                 "after %d tries. Giving up",
-                batch_size, tries
+                batch_size,
+                tries,
             )
 
         # Mark all events as completed
