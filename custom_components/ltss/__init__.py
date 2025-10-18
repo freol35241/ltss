@@ -49,14 +49,20 @@ DOMAIN = "ltss"
 
 CONF_DB_URL = "db_url"
 CONF_CHUNK_TIME_INTERVAL = "chunk_time_interval"
-
-CONNECT_RETRY_WAIT = 3
+CONF_DB_RETRY_WAIT = "db_retry_wait"
+CONF_DB_RETRY_LIMIT = "db_retry_limit"
 
 CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: INCLUDE_EXCLUDE_BASE_FILTER_SCHEMA.extend(
             {
                 vol.Required(CONF_DB_URL): cv.string,
+                vol.Optional(
+                    CONF_DB_RETRY_WAIT, default=3.0
+                ): cv.positive_float,  # time to wait between db reconnects, default 3.0s
+                vol.Optional(CONF_DB_RETRY_LIMIT, default=10): vol.Any(
+                    None, cv.positive_int
+                ),  # max. number of retries when connecting to the DB, no limit by default
                 vol.Optional(
                     CONF_CHUNK_TIME_INTERVAL, default=2592000000000
                 ): cv.positive_int,  # 30 days
@@ -72,12 +78,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config[DOMAIN]
 
     db_url = conf.get(CONF_DB_URL)
+    db_retry_wait = conf.get(CONF_DB_RETRY_WAIT)
+    db_retry_limit = conf.get(CONF_DB_RETRY_LIMIT)
     chunk_time_interval = conf.get(CONF_CHUNK_TIME_INTERVAL)
     entity_filter = convert_include_exclude_filter(conf)
 
     instance = LTSS_DB(
         hass=hass,
         uri=db_url,
+        db_retry_wait=db_retry_wait,
+        db_retry_limit=db_retry_limit,
         chunk_time_interval=chunk_time_interval,
         entity_filter=entity_filter,
     )
@@ -95,6 +105,8 @@ class LTSS_DB(threading.Thread):
         hass: HomeAssistant,
         uri: str,
         chunk_time_interval: int,
+        db_retry_wait: int,
+        db_retry_limit: int,
         entity_filter: Callable[[str], bool],
     ) -> None:
         """Initialize the ltss."""
@@ -104,6 +116,8 @@ class LTSS_DB(threading.Thread):
         self.queue: Any = queue.Queue()
         self.recording_start = dt_util.utcnow()
         self.db_url = uri
+        self.db_retry_wait = db_retry_wait
+        self.db_retry_limit = db_retry_limit
         self.chunk_time_interval = chunk_time_interval
         self.async_db_ready = asyncio.Future()
         self.engine: Any = None
@@ -123,9 +137,11 @@ class LTSS_DB(threading.Thread):
         tries = 1
         connected = False
 
-        while not connected and tries <= 10:
+        while not connected and (
+            self.db_retry_limit is None or tries <= self.db_retry_limit
+        ):
             if tries != 1:
-                time.sleep(CONNECT_RETRY_WAIT)
+                time.sleep(self.db_retry_wait)
             try:
                 self._setup_connection()
                 connected = True
@@ -134,7 +150,7 @@ class LTSS_DB(threading.Thread):
                 _LOGGER.error(
                     "Error during connection setup: %s (retrying " "in %s seconds)",
                     err,
-                    CONNECT_RETRY_WAIT,
+                    self.db_retry_wait,
                 )
                 tries += 1
 
@@ -202,7 +218,7 @@ class LTSS_DB(threading.Thread):
             updated = False
             while not updated and tries <= 10:
                 if tries != 1:
-                    time.sleep(CONNECT_RETRY_WAIT)
+                    time.sleep(self.db_retry_wait)
                 try:
                     with self.get_session() as session:
                         with session.begin():
@@ -222,7 +238,7 @@ class LTSS_DB(threading.Thread):
                         "Error in database connectivity: %s. "
                         "(retrying in %s seconds)",
                         err,
-                        CONNECT_RETRY_WAIT,
+                        self.db_retry_wait,
                     )
                     tries += 1
 
