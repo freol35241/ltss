@@ -49,6 +49,9 @@ configuration.yaml
         ltss:
             db_url: postgresql://USER:PASSWORD@HOST_ADRESS/DB_NAME
             chunk_time_interval: 2592000000000
+            batch_size: 100
+            batch_timeout_ms: 2000
+            poll_interval_ms: 500
             include:
                 domains:
                 - sensor
@@ -70,6 +73,18 @@ configuration.yaml
         chunk_time_interval
         (int)(Optional)
         The time interval to be used for chunking in TimescaleDB in microseconds. Defaults to 2592000000000 (30 days). Ignored for databases without TimescaleDB extension.
+
+        batch_size
+        (int)(Optional)
+        Number of events to collect before writing to database. Set batch_size = 1 to disable batching (immediate writes). Defaults to 100. Range: 1-10000.
+
+        batch_timeout_ms
+        (int)(Optional)
+        Maximum time in milliseconds to wait before writing collected events to database. Defaults to 2000 (2 seconds). Range: 100-60000.
+
+        poll_interval_ms
+        (int)(Optional)
+        Internal polling interval in milliseconds for collecting events. Defaults to 500. Range: 10-1000.
 
         exclude
         (map)(Optional)
@@ -117,6 +132,21 @@ The states are stored in a single table ([hypertable](https://docs.timescale.com
 
 ### Only available with PosttGIS:
 The location column is populated for those states where ```latitude``` and ```longitude``` is part of the state attributes.
+
+## Performance Notes
+
+### Batch Processing
+LTSS uses batch processing to optimize database write performance. Events are collected and written to the database in batches rather than individually. This significantly improves performance, especially in high-frequency event scenarios:
+
+- **Batch Size**: Controls how many events are collected before writing to database (default: 100)
+- **Batch Timeout**: Maximum time to wait before writing collected events (default: 2000ms)
+- **Poll Interval**: Internal polling interval for event collection (default: 100ms)
+
+The system will write to the database when either the batch size limit is reached OR the timeout expires, whichever comes first.
+
+### Tuning Guidelines
+- **High-frequency environments**: Increase `batch_size` to improve throughput
+- **Low-latency requirements**: Decrease `batch_timeout_ms` for faster writes
 
 ## Credits
 Big thanks to the authors of the [recorder component](https://github.com/home-assistant/home-assistant/tree/dev/homeassistant/components/recorder) for Home Assistant for a great starting point code-wise!

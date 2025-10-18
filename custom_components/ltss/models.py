@@ -64,7 +64,7 @@ class LTSS(Base):  # type: ignore
         row = LTSS(
             entity_id=entity_id,
             time=event.time_fired,
-            state=state.state.replace("\x00", "\uFFFD"),
+            state=state.state.replace("\x00", "\ufffd"),
             attributes=attrs,
             location=location,
         )
